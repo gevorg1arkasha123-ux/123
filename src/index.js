@@ -1,0 +1,109 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import crypto from 'node:crypto';
+import express from 'express';
+import multer from 'multer';
+import { ROOT, config, mockMode, packages, tools, loadTemplates } from './config.js';
+import { verifyInitData } from './auth.js';
+import { upsertUser, getUser, userJobs } from './db.js';
+import { startJob, startPoller, setNotifier } from './generate.js';
+import { bot, createInvoice, notifyJob } from './bot.js';
+
+fs.mkdirSync(config.uploadsDir, { recursive: true });
+
+const ALLOWED = /^(image\/(jpeg|png|webp|heic)|video\/(mp4|quicktime|webm))$/;
+const upload = multer({
+  storage: multer.diskStorage({
+    destination: config.uploadsDir,
+    filename: (_req, file, cb) => {
+      const ext = (path.extname(file.originalname) || '.bin').toLowerCase().replace(/[^.a-z0-9]/g, '');
+      cb(null, crypto.randomBytes(12).toString('hex') + ext);
+    },
+  }),
+  limits: { fileSize: 50 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => cb(null, ALLOWED.test(file.mimetype)),
+});
+
+const app = express();
+app.use(express.json());
+app.use(express.static(path.join(ROOT, 'public')));
+app.use('/uploads', express.static(config.uploadsDir));
+
+// Авторизация через подписанный Telegram initData
+app.use('/api', (req, res, next) => {
+  let tgUser = verifyInitData(req.get('X-Init-Data'));
+  if (!tgUser && config.devAuth) tgUser = { id: 1, first_name: 'Dev', username: 'dev' };
+  if (!tgUser) return res.status(401).json({ error: 'Откройте приложение через Telegram' });
+  req.user = upsertUser(tgUser, config.startBonus);
+  next();
+});
+
+app.get('/api/me', (req, res) => {
+  res.json({
+    user: getUser(req.user.id),
+    mock: mockMode,
+    packages,
+    tools: Object.fromEntries(Object.entries(tools).map(([k, v]) => [k, { title: v.title, cost: v.cost, kind: v.kind }])),
+  });
+});
+
+app.get('/api/templates', (_req, res) => res.json(loadTemplates()));
+
+app.get('/api/history', (req, res) => res.json({ jobs: userJobs(req.user.id), balance: getUser(req.user.id).balance }));
+
+app.post('/api/invoice', async (req, res) => {
+  try {
+    res.json({ link: await createInvoice(req.user.id, req.body.package) });
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+const fileFields = upload.fields([{ name: 'image', maxCount: 1 }, { name: 'image2', maxCount: 1 }, { name: 'video', maxCount: 1 }]);
+
+app.post('/api/generate', fileFields, async (req, res) => {
+  const { tool, template_id, prompt, voice } = req.body;
+  const f = req.files || {};
+  const url = (k) => (f[k]?.[0] ? `${config.publicUrl}/uploads/${f[k][0].filename}` : undefined);
+  const params = { prompt: (prompt || '').trim().slice(0, 2000), voice, image_url: url('image'), image2_url: url('image2'), video_url: url('video') };
+
+  if (!tools[tool]) return res.status(400).json({ error: 'Неизвестный инструмент' });
+  let template;
+  if (tool === 'template') {
+    template = loadTemplates().find((t) => t.id === template_id);
+    if (!template) return res.status(400).json({ error: 'Шаблон не найден' });
+  }
+  const need = {
+    template: ['image_url'], motion: ['image_url', 'video_url'], image: ['prompt'],
+    tryon: ['image_url', 'image2_url'], tts: ['prompt'], audio: ['prompt'], upscale: ['image_url'],
+  }[tool];
+  if (need.some((k) => !params[k])) return res.status(400).json({ error: 'Заполните все поля и загрузите файлы' });
+
+  try {
+    const jobId = await startJob({ userId: req.user.id, tool, params, template });
+    res.json({ job_id: jobId, balance: getUser(req.user.id).balance });
+  } catch (e) {
+    res.status(e.code === 'NO_BALANCE' ? 402 : 500).json({ error: e.message, code: e.code });
+  }
+});
+
+app.use((err, _req, res, _next) => {
+  console.error(err);
+  res.status(500).json({ error: err.message || 'Ошибка сервера' });
+});
+
+app.listen(config.port, () => {
+  console.log(`Сервер: http://localhost:${config.port}  (публичный адрес: ${config.publicUrl})`);
+  if (mockMode) console.log('FAL_KEY не задан — работает ДЕМО-режим, генерация имитируется.');
+});
+
+setNotifier(notifyJob);
+startPoller();
+
+if (bot) {
+  await bot.api.setChatMenuButton({ menu_button: { type: 'web_app', text: 'Открыть', web_app: { url: config.publicUrl } } })
+    .catch((e) => console.warn('Не удалось поставить кнопку меню (нужен HTTPS PUBLIC_URL):', e.message));
+  bot.start({ onStart: (me) => console.log(`Бот @${me.username} запущен`) });
+} else {
+  console.log('BOT_TOKEN не задан — бот не запущен, работает только веб-часть.');
+}

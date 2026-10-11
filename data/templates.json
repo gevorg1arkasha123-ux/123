@@ -1,0 +1,98 @@
+[
+  {
+    "id": "runway-walk",
+    "title": "Модный показ",
+    "category": "Тренды",
+    "cost": 30,
+    "duration": 5,
+    "preview": "",
+    "gradient": ["#7b2ff7", "#f107a3"],
+    "emoji": "👠",
+    "hint": "Фото в полный рост, хорошо видно лицо",
+    "prompt": "The person confidently walks down a fashion runway toward the camera, dramatic spotlights, camera flashes, cinematic slow motion, keep the face identical to the photo"
+  },
+  {
+    "id": "dance-party",
+    "title": "Танец на вечеринке",
+    "category": "Тренды",
+    "cost": 30,
+    "duration": 5,
+    "preview": "",
+    "gradient": ["#ff512f", "#dd2476"],
+    "emoji": "🕺",
+    "hint": "Фото в полный рост",
+    "prompt": "The person dances energetically at an outdoor night party with string lights, crowd cheering and filming on phones, dynamic handheld camera, keep the face identical"
+  },
+  {
+    "id": "action-hero",
+    "title": "Герой боевика",
+    "category": "Тренды",
+    "cost": 30,
+    "duration": 5,
+    "preview": "",
+    "gradient": ["#232526", "#ff6a00"],
+    "emoji": "💥",
+    "hint": "Портрет или фото по пояс",
+    "prompt": "Cinematic action movie shot: the person walks away from a huge explosion in slow motion, debris flying, sunset light, epic blockbuster style, keep the face identical"
+  },
+  {
+    "id": "romance-field",
+    "title": "Романтика в поле",
+    "category": "Пары",
+    "cost": 30,
+    "duration": 5,
+    "preview": "",
+    "gradient": ["#f7971e", "#ffd200"],
+    "emoji": "💞",
+    "hint": "Фото пары",
+    "prompt": "The couple from the photo hug and spin around in a golden wheat field at sunset, warm cinematic light, romantic film look, keep faces identical"
+  },
+  {
+    "id": "hug-old-self",
+    "title": "Обними себя в детстве",
+    "category": "Пары",
+    "cost": 30,
+    "duration": 5,
+    "preview": "",
+    "gradient": ["#00c6ff", "#0072ff"],
+    "emoji": "🤗",
+    "hint": "Фото, где рядом вы сейчас и вы в детстве",
+    "prompt": "The two people in the photo turn to each other and warmly hug, soft natural light, emotional moment, gentle camera push-in, keep faces identical"
+  },
+  {
+    "id": "superhero-fly",
+    "title": "Полёт супергероя",
+    "category": "Эффекты",
+    "cost": 30,
+    "duration": 5,
+    "preview": "",
+    "gradient": ["#1d2b64", "#f8cdda"],
+    "emoji": "🦸",
+    "hint": "Фото в полный рост",
+    "prompt": "The person lifts off the ground and flies up into the sky like a superhero, cape flowing, clouds rushing by, epic camera following, keep the face identical"
+  },
+  {
+    "id": "anime",
+    "title": "Аниме-герой",
+    "category": "Эффекты",
+    "cost": 30,
+    "duration": 5,
+    "preview": "",
+    "gradient": ["#8e2de2", "#4a00e0"],
+    "emoji": "✨",
+    "hint": "Портрет",
+    "prompt": "The person transforms into an anime character with glowing aura, wind blowing hair, sparkles, dramatic anime style animation"
+  },
+  {
+    "id": "old-photo",
+    "title": "Оживить старое фото",
+    "category": "Эффекты",
+    "cost": 30,
+    "duration": 5,
+    "preview": "",
+    "gradient": ["#614385", "#516395"],
+    "emoji": "📸",
+    "hint": "Старая фотография",
+    "prompt": "Bring the photo to life: the people gently smile, blink and slightly move their heads, natural subtle motion, preserve the original photo style"
+  }
+]
