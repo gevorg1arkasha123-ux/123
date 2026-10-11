@@ -3,11 +3,12 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import express from 'express';
 import multer from 'multer';
-import { ROOT, config, mockMode, packages, tools, loadTemplates } from './config.js';
+import { ROOT, config, mockMode, yookassaEnabled, packages, tools, loadTemplates } from './config.js';
 import { verifyInitData } from './auth.js';
 import { upsertUser, getUser, userJobs, refStats } from './db.js';
 import { startJob, startPoller, setNotifier } from './generate.js';
-import { bot, createInvoice, notifyJob, refLink, parseRef } from './bot.js';
+import { bot, createStarsInvoice, notifyJob, refLink, parseRef, announcePayment } from './bot.js';
+import { createYookassaPayment, handleWebhook, startYookassaPoller, setYookassaPaidHandler } from './yookassa.js';
 
 fs.mkdirSync(config.uploadsDir, { recursive: true });
 
@@ -29,6 +30,12 @@ app.use(express.json());
 app.use(express.static(path.join(ROOT, 'public')));
 app.use('/uploads', express.static(config.uploadsDir));
 
+// Уведомления ЮKassa. Статус платежа всё равно перепроверяется через API, поэтому подделать оплату нельзя.
+app.post('/webhook/yookassa', async (req, res) => {
+  try { await handleWebhook(req.body); } catch (e) { console.error('yookassa webhook', e.message); }
+  res.sendStatus(200);
+});
+
 // Авторизация через подписанный Telegram initData
 app.use('/api', (req, res, next) => {
   let tgUser = verifyInitData(req.get('X-Init-Data'));
@@ -43,18 +50,32 @@ app.get('/api/me', (req, res) => {
     user: getUser(req.user.id),
     mock: mockMode,
     packages,
+    payments: { card: yookassaEnabled, stars: Boolean(bot) },
+    support: config.supportUsername || null,
     ref: { link: refLink(req.user.id), percent: config.refPercent, earned: getUser(req.user.id).ref_earned, ...refStats(req.user.id) },
-    tools: Object.fromEntries(Object.entries(tools).map(([k, v]) => [k, { title: v.title, cost: v.cost, kind: v.kind }])),
+    tools: Object.fromEntries(Object.entries(tools).map(([k, v]) => [k, {
+      title: v.title, cost: v.cost, kind: v.kind,
+      variants: v.variants && Object.fromEntries(Object.entries(v.variants).map(([vk, x]) => [vk, { title: x.title, desc: x.desc, cost: x.cost }])),
+    }])),
   });
 });
 
-app.get('/api/templates', (_req, res) => res.json(loadTemplates()));
+// Клиенту не отдаём промпты и себестоимость
+app.get('/api/templates', (_req, res) => res.json(loadTemplates().map(({ prompt, falUsd, model, video, ...t }) => t)));
 
 app.get('/api/history', (req, res) => res.json({ jobs: userJobs(req.user.id), balance: getUser(req.user.id).balance }));
 
-app.post('/api/invoice', async (req, res) => {
+app.post('/api/pay/stars', async (req, res) => {
   try {
-    res.json({ link: await createInvoice(req.user.id, req.body.package) });
+    res.json({ link: await createStarsInvoice(req.user.id, req.body.package) });
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+app.post('/api/pay/card', async (req, res) => {
+  try {
+    res.json({ link: await createYookassaPayment(req.user.id, req.body.package) });
   } catch (e) {
     res.status(400).json({ error: e.message });
   }
@@ -63,10 +84,13 @@ app.post('/api/invoice', async (req, res) => {
 const fileFields = upload.fields([{ name: 'image', maxCount: 1 }, { name: 'image2', maxCount: 1 }, { name: 'video', maxCount: 1 }]);
 
 app.post('/api/generate', fileFields, async (req, res) => {
-  const { tool, template_id, prompt, voice } = req.body;
+  const { tool, template_id, prompt, voice, variant, aspect } = req.body;
   const f = req.files || {};
   const url = (k) => (f[k]?.[0] ? `${config.publicUrl}/uploads/${f[k][0].filename}` : undefined);
-  const params = { prompt: (prompt || '').trim().slice(0, 2000), voice, image_url: url('image'), image2_url: url('image2'), video_url: url('video') };
+  const params = {
+    prompt: (prompt || '').trim().slice(0, 2000), voice, variant,
+    aspect: ['9:16', '16:9', '1:1'].includes(aspect) ? aspect : '9:16',
+    image_url: url('image'), image2_url: url('image2'), video_url: url('video') };
 
   if (tool === 'tts') params.prompt = params.prompt.slice(0, 1000); // себестоимость озвучки зависит от длины текста
   if (!tools[tool]) return res.status(400).json({ error: 'Неизвестный инструмент' });
@@ -76,7 +100,7 @@ app.post('/api/generate', fileFields, async (req, res) => {
     if (!template) return res.status(400).json({ error: 'Шаблон не найден' });
   }
   const need = {
-    template: ['image_url'], motion: ['image_url', 'video_url'], image: ['prompt'],
+    template: ['image_url'], t2v: ['prompt'], i2v: ['image_url'], motion: ['image_url', 'video_url'], image: ['prompt'],
     tryon: ['image_url', 'image2_url'], tts: ['prompt'], audio: ['prompt'], upscale: ['image_url'],
   }[tool];
   if (need.some((k) => !params[k])) return res.status(400).json({ error: 'Заполните все поля и загрузите файлы' });
@@ -97,10 +121,13 @@ app.use((err, _req, res, _next) => {
 app.listen(config.port, () => {
   console.log(`Сервер: http://localhost:${config.port}  (публичный адрес: ${config.publicUrl})`);
   if (mockMode) console.log('FAL_KEY не задан — работает ДЕМО-режим, генерация имитируется.');
+  if (!yookassaEnabled) console.log('ЮKassa не настроена — оплата картой/СБП скрыта, доступны только Stars.');
 });
 
 setNotifier(notifyJob);
 startPoller();
+setYookassaPaidHandler((p) => announcePayment({ ...p, label: `${p.rub} ₽ (карта/СБП)` }));
+startYookassaPoller();
 
 if (bot) {
   await bot.api.setChatMenuButton({ menu_button: { type: 'web_app', text: 'Открыть', web_app: { url: config.publicUrl } } })
@@ -109,6 +136,7 @@ if (bot) {
     { command: 'start', description: 'Открыть приложение' },
     { command: 'balance', description: 'Мой баланс' },
     { command: 'invite', description: 'Пригласить друга и получать бонусы' },
+    { command: 'help', description: 'Помощь' },
   ]).catch(() => {});
   bot.start({ onStart: (me) => console.log(`Бот @${me.username} запущен`) });
 } else {

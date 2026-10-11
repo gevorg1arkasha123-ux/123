@@ -3,7 +3,6 @@
     "id": "runway-walk",
     "title": "Модный показ",
     "category": "Тренды",
-    "duration": 5,
     "preview": "",
     "gradient": [
       "#7b2ff7",
@@ -17,7 +16,6 @@
     "id": "dance-party",
     "title": "Танец на вечеринке",
     "category": "Тренды",
-    "duration": 5,
     "preview": "",
     "gradient": [
       "#ff512f",
@@ -31,7 +29,6 @@
     "id": "action-hero",
     "title": "Герой боевика",
     "category": "Тренды",
-    "duration": 5,
     "preview": "",
     "gradient": [
       "#232526",
@@ -45,7 +42,6 @@
     "id": "romance-field",
     "title": "Романтика в поле",
     "category": "Пары",
-    "duration": 5,
     "preview": "",
     "gradient": [
       "#f7971e",
@@ -59,7 +55,6 @@
     "id": "hug-old-self",
     "title": "Обними себя в детстве",
     "category": "Пары",
-    "duration": 5,
     "preview": "",
     "gradient": [
       "#00c6ff",
@@ -73,7 +68,6 @@
     "id": "superhero-fly",
     "title": "Полёт супергероя",
     "category": "Эффекты",
-    "duration": 5,
     "preview": "",
     "gradient": [
       "#1d2b64",
@@ -87,7 +81,6 @@
     "id": "anime",
     "title": "Аниме-герой",
     "category": "Эффекты",
-    "duration": 5,
     "preview": "",
     "gradient": [
       "#8e2de2",
@@ -101,7 +94,6 @@
     "id": "old-photo",
     "title": "Оживить старое фото",
     "category": "Эффекты",
-    "duration": 5,
     "preview": "",
     "gradient": [
       "#614385",

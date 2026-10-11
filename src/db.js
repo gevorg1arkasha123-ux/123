@@ -50,6 +50,21 @@ const addColumn = (table, col, def) => {
 addColumn('users', 'referrer_id', 'INTEGER');
 addColumn('users', 'ref_earned', 'INTEGER NOT NULL DEFAULT 0');
 addColumn('jobs', 'fal_usd', 'REAL NOT NULL DEFAULT 0');
+addColumn('payments', 'method', "TEXT NOT NULL DEFAULT 'stars'");
+addColumn('payments', 'rub', 'REAL NOT NULL DEFAULT 0');
+
+// Счета ЮKassa, ожидающие оплаты
+db.exec(`
+CREATE TABLE IF NOT EXISTS invoices (
+  id TEXT PRIMARY KEY,
+  user_id INTEGER NOT NULL,
+  package_id TEXT NOT NULL,
+  rub REAL NOT NULL,
+  credits INTEGER NOT NULL,
+  status TEXT NOT NULL,          -- pending | succeeded | canceled
+  created_at INTEGER NOT NULL
+);
+`);
 
 const now = () => Date.now();
 
@@ -80,8 +95,10 @@ export function stats() {
     users: q('SELECT COUNT(*) n FROM users').n,
     usersDay: q('SELECT COUNT(*) n FROM users WHERE created_at > ?', day).n,
     payers: q('SELECT COUNT(DISTINCT user_id) n FROM payments').n,
-    stars: q('SELECT COALESCE(SUM(stars),0) n FROM payments').n,
-    starsDay: q('SELECT COALESCE(SUM(stars),0) n FROM payments WHERE created_at > ?', day).n,
+    stars: q("SELECT COALESCE(SUM(stars),0) n FROM payments WHERE method = 'stars'").n,
+    starsDay: q("SELECT COALESCE(SUM(stars),0) n FROM payments WHERE method = 'stars' AND created_at > ?", day).n,
+    rub: q('SELECT COALESCE(SUM(rub),0) n FROM payments').n,
+    rubDay: q('SELECT COALESCE(SUM(rub),0) n FROM payments WHERE created_at > ?', day).n,
     jobs: q("SELECT COUNT(*) n FROM jobs WHERE status = 'done'").n,
     jobsDay: q("SELECT COUNT(*) n FROM jobs WHERE status = 'done' AND created_at > ?", day).n,
     falUsd: q("SELECT COALESCE(SUM(fal_usd),0) n FROM jobs WHERE status = 'done'").n,
@@ -104,9 +121,10 @@ export function chargeBalance(userId, amount) {
 }
 
 // Зачисляет покупку и реферальный бонус пригласившему. Возвращает { referrerId, bonus } или null при дубле.
-export const recordPayment = db.transaction((chargeId, userId, stars, credits, refPercent) => {
-  const r = db.prepare('INSERT OR IGNORE INTO payments (charge_id, user_id, stars, credits, created_at) VALUES (?, ?, ?, ?, ?)')
-    .run(chargeId, userId, stars, credits, now());
+// pay = { method: 'stars' | 'yookassa', stars, rub } — rub для звёзд считается по курсу вывода.
+export const recordPayment = db.transaction((chargeId, userId, pay, credits, refPercent) => {
+  const r = db.prepare('INSERT OR IGNORE INTO payments (charge_id, user_id, stars, credits, method, rub, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
+    .run(chargeId, userId, pay.stars || 0, credits, pay.method, pay.rub || 0, now());
   if (!r.changes) return null;
   addBalance(userId, credits);
   const referrerId = getUser(userId)?.referrer_id;
@@ -136,3 +154,13 @@ export const userJobs = (userId) =>
   db.prepare('SELECT id, tool, title, kind, cost, status, result_url, error, created_at FROM jobs WHERE user_id = ? ORDER BY id DESC LIMIT 100').all(userId);
 export const pendingJobs = () =>
   db.prepare("SELECT * FROM jobs WHERE status = 'queued' AND request_id IS NOT NULL").all();
+
+export function createInvoiceRow(inv) {
+  db.prepare("INSERT INTO invoices (id, user_id, package_id, rub, credits, status, created_at) VALUES (?, ?, ?, ?, ?, 'pending', ?)")
+    .run(inv.id, inv.userId, inv.packageId, inv.rub, inv.credits, now());
+}
+export const getInvoice = (id) => db.prepare('SELECT * FROM invoices WHERE id = ?').get(id);
+export const setInvoiceStatus = (id, status) => db.prepare('UPDATE invoices SET status = ? WHERE id = ?').run(status, id);
+// Неоплаченные счета за последние 2 часа — их статус перепроверяем, если вебхук не дошёл
+export const pendingInvoices = () =>
+  db.prepare("SELECT * FROM invoices WHERE status = 'pending' AND created_at > ?").all(Date.now() - 2 * 3600 * 1000);

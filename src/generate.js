@@ -1,4 +1,4 @@
-import { config, mockMode, tools } from './config.js';
+import { config, mockMode, tools, resolveTool } from './config.js';
 import { createJob, updateJob, getJob, pendingJobs, addBalance, chargeBalance } from './db.js';
 
 const FAL_QUEUE = 'https://queue.fal.run';
@@ -18,26 +18,49 @@ async function falFetch(url, opts = {}) {
 // Собирает модель и входные параметры fal.ai для конкретного инструмента
 export function buildRequest(tool, p, template) {
   const t = tools[tool];
+  const variant = t.variants ? (t.variants[p.variant] || Object.values(t.variants)[0]) : null;
   switch (tool) {
     case 'template':
+      // Шаблон с образцовым видео: движения из видео переносятся на фото клиента
+      if (template.type === 'motion') {
+        return {
+          model: template.model || t.model,
+          input: {
+            image_url: p.image_url, video_url: template.video, prompt: template.prompt || '',
+            character_orientation: 'video', keep_original_sound: true,
+          },
+        };
+      }
       return {
-        model: template.model || t.model,
-        input: { prompt: template.prompt, image_url: p.image_url, duration: String(template.duration || 5) },
+        model: template.model || t.i2vModel,
+        input: { prompt: template.prompt, start_image_url: p.image_url, duration: '5' },
+      };
+    case 't2v':
+      return {
+        model: variant.t2v,
+        input: { prompt: p.prompt, aspect_ratio: p.aspect || '9:16', duration: '5', generate_audio: true },
+      };
+    case 'i2v':
+      return {
+        model: variant.i2v,
+        input: p.variant === 'seedance'
+          ? { prompt: p.prompt || 'natural cinematic motion', image_url: p.image_url, duration: '5', generate_audio: true }
+          : { prompt: p.prompt || 'natural cinematic motion', start_image_url: p.image_url, duration: '5', generate_audio: true },
       };
     case 'motion':
       return {
         model: t.model,
-        input: { image_url: p.image_url, video_url: p.video_url, prompt: p.prompt || '', character_orientation: 'video' },
+        input: { image_url: p.image_url, video_url: p.video_url, prompt: p.prompt || '', character_orientation: 'video', keep_original_sound: true },
       };
     case 'image':
       return p.image_url
-        ? { model: t.editModel, input: { prompt: p.prompt, image_url: p.image_url } }
-        : { model: t.model, input: { prompt: p.prompt, image_size: 'portrait_16_9' } };
+        ? { model: t.editModel, input: { prompt: p.prompt, image_urls: [p.image_url] } }
+        : { model: t.model, input: { prompt: p.prompt, aspect_ratio: '9:16' } };
     case 'tryon':
       return {
         model: t.model,
         input: {
-          prompt: p.prompt || 'Put the clothing from the second image on the person from the first image. Keep face, pose and background unchanged. Photorealistic.',
+          prompt: p.prompt || 'Put the clothing from the second image on the person from the first image. Keep face, body, pose and background unchanged. Photorealistic.',
           image_urls: [p.image_url, p.image2_url],
         },
       };
@@ -63,9 +86,8 @@ export function setNotifier(fn) { notify = fn; }
 
 export async function startJob({ userId, tool, params, template }) {
   const t = tools[tool];
-  const cost = template?.cost ?? t.cost;
-  const title = template ? template.title : t.title;
-  const kind = template ? 'video' : t.kind;
+  const { cost, falUsd: estUsd, title } = resolveTool(tool, params.variant, template);
+  const kind = t.kind;
   const { model, input } = buildRequest(tool, params, template);
 
   if (!chargeBalance(userId, cost)) {
@@ -73,13 +95,13 @@ export async function startJob({ userId, tool, params, template }) {
     err.code = 'NO_BALANCE';
     throw err;
   }
-  const falUsd = mockMode ? 0 : (template?.falUsd ?? t.falUsd);
+  const falUsd = mockMode ? 0 : estUsd;
   const jobId = createJob({ userId, tool, title, kind, cost, model, falUsd });
 
   if (mockMode) {
     // Демо-режим без FAL_KEY: через 4 секунды «готово», в результате — загруженный файл или превью шаблона
     updateJob(jobId, { request_id: 'mock' });
-    const result = params.image_url || template?.preview || `${config.publicUrl}/img/mock.svg`;
+    const result = template?.preview || params.video_url || params.image_url || `${config.publicUrl}/img/mock.svg`;
     setTimeout(() => finish(jobId, result), 4000);
     return jobId;
   }

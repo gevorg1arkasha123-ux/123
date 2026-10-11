@@ -42,12 +42,28 @@ const icons = {
 
 // Описание форм инструментов
 const TOOL_FORMS = {
+  t2v: {
+    title: 'Видео по описанию', desc: 'Опишите сцену — нейросеть снимет ролик со звуком.', icon: icons.video,
+    fields: [
+      { name: 'variant', type: 'variant' },
+      { name: 'prompt', type: 'text', label: 'Что происходит в видео?', placeholder: 'Рыжий кот в очках диджеит на крыше небоскрёба ночью, неоновый свет, камера облетает вокруг' },
+      { name: 'aspect', type: 'select', label: 'Формат', options: [['9:16', 'Вертикальное 9:16 (Reels, TikTok)'], ['16:9', 'Горизонтальное 16:9'], ['1:1', 'Квадрат 1:1']] },
+    ],
+  },
+  i2v: {
+    title: 'Оживить фото', desc: 'Загрузите фото и опишите, что должно произойти.', icon: icons.image,
+    fields: [
+      { name: 'variant', type: 'variant' },
+      { name: 'image', type: 'file', accept: 'image/*', label: 'Фото' },
+      { name: 'prompt', type: 'text', label: 'Что должно произойти (необязательно)', placeholder: 'Человек улыбается и машет рукой, волосы развеваются на ветру', optional: true },
+    ],
+  },
   motion: {
     title: 'Повторить видео', desc: 'Загрузите видео с движением и фото героя — персонаж повторит движения.', icon: icons.video,
     fields: [
       { name: 'video', type: 'file', accept: 'video/*', label: 'Видео с движением (3–10 сек)' },
       { name: 'image', type: 'file', accept: 'image/*', label: 'Фото героя' },
-      { name: 'prompt', type: 'text', label: 'Пожелания (необязательно)', placeholder: 'Например: на фоне ночного города' },
+      { name: 'prompt', type: 'text', label: 'Пожелания (необязательно)', placeholder: 'Например: на фоне ночного города', optional: true },
     ],
   },
   image: {
@@ -183,15 +199,21 @@ function renderCreate() {
     <p class="sub">Выберите инструмент и создайте что-то своё.</p>
     <button class="banner" data-go="home"><span class="ic">${icons.grid}</span><span><b>Начните с готового шаблона</b><small>Выберите сюжет и добавьте фото</small></span><span class="chev">${icons.chev}</span></button>
     <div class="section-label">Все инструменты</div>
-    <button class="feature" data-tool="motion">
+    <button class="feature" data-tool="t2v">
+      <span class="txt"><span class="new">KLING 3 · SEEDANCE 2</span><h3>Видео по описанию</h3><p>Опишите сцену словами — получите ролик со звуком.</p>
+      <span class="pill"><span class="pill-tag">от ${state.me?.tools.t2v.cost ?? ''} 🪙</span><span class="round">${icons.arrow}</span></span></span>
+      <span class="art" style="background:linear-gradient(160deg,#00c6ff,#7b2ff7 60%,#f107a3)">🎥</span>
+    </button>
+    <button class="feature" data-tool="motion" style="margin-top:12px">
       <span class="txt"><span class="new">НОВОЕ</span><h3>Повторить видео</h3><p>Перенесите движение или замените героя, предмет и фон.</p>
       <span class="pill"><span class="pill-tag">${state.me?.tools.motion.cost ?? ''} 🪙</span><span class="round">${icons.arrow}</span></span></span>
       <span class="art">🐱</span>
     </button>
     <div class="tools">
+      ${tile('i2v', icons.video, 'Оживить фото', 'Фото превращается в видео')}
       ${tile('image', icons.image, 'КАРТИНКА', 'По описанию или по вашему фото')}
-      ${tile('audio', icons.audio, 'АУДИО', 'Ваша идея в новом звучании')}
       ${tile('tryon', icons.brush, 'Примерочная', 'Примерьте новый образ')}
+      ${tile('audio', icons.audio, 'АУДИО', 'Ваша идея в новом звучании')}
       ${tile('tts', icons.audio, 'ОЗВУЧКА', 'Превратите текст в речь')}
       ${tile('upscale', icons.expand, 'Улучшить качество', 'Больше деталей в ваших кадрах')}
     </div>`;
@@ -199,12 +221,18 @@ function renderCreate() {
   $view.querySelectorAll('[data-tool]').forEach((b) => b.onclick = () => openTool(b.dataset.tool));
 }
 
-function fieldHtml(f) {
+function fieldHtml(f, toolKey) {
+  if (f.type === 'variant') {
+    const vs = Object.entries(state.me.tools[toolKey].variants);
+    return `<div class="field"><label>Нейросеть</label><div class="variants">${vs.map(([k, v], i) => `
+      <label class="variant"><input type="radio" name="variant" value="${k}" ${i ? '' : 'checked'}>
+      <span><b>${esc(v.title)}</b><small>${esc(v.desc)}</small><em>${v.cost} 🪙</em></span></label>`).join('')}</div></div>`;
+  }
   if (f.type === 'file') {
     return `<div class="field"><label>${esc(f.label)}</label><div class="drop" data-drop="${f.name}"><span>Нажмите, чтобы загрузить</span><input type="file" name="${f.name}" accept="${f.accept}"></div></div>`;
   }
   if (f.type === 'select') {
-    return `<div class="field"><label>${esc(f.label)}</label><select name="${f.name}">${f.options.map((o) => `<option>${esc(o)}</option>`).join('')}</select></div>`;
+    return `<div class="field"><label>${esc(f.label)}</label><select name="${f.name}">${f.options.map((o) => (Array.isArray(o) ? `<option value="${esc(o[0])}">${esc(o[1])}</option>` : `<option>${esc(o)}</option>`)).join('')}</select></div>`;
   }
   return `<div class="field"><label>${esc(f.label)}</label><textarea name="${f.name}" rows="4" placeholder="${esc(f.placeholder || '')}"></textarea></div>`;
 }
@@ -219,11 +247,15 @@ function openTool(key) {
         <h1>${esc(form.title)}</h1>
         <p class="sub">${esc(form.desc)}</p>
         <form id="f">
-          ${form.fields.map(fieldHtml).join('')}
-          <button class="cta" type="submit">Создать · ${state.me.tools[key].cost} 🪙</button>
+          ${form.fields.map((fl) => fieldHtml(fl, key)).join('')}
+          <button class="cta" type="submit">Создать · <span id="price">${state.me.tools[key].cost}</span> 🪙</button>
         </form>`;
       bindCommon();
-      bindForm({ tool: key }, form.fields);
+      bindForm({ tool: key }, form.fields.filter((fl) => fl.type !== 'variant'));
+      // цена меняется вместе с выбранной нейросетью
+      $view.querySelectorAll('input[name=variant]').forEach((r) => r.addEventListener('change', () => {
+        $view.querySelector('#price').textContent = state.me.tools[key].variants[r.value].cost;
+      }));
     },
   });
 }
@@ -249,7 +281,7 @@ function bindForm(extra, fields) {
     for (const fl of fields) {
       const v = fd.get(fl.name);
       const empty = fl.type === 'file' ? !(v && v.size) : !String(v || '').trim();
-      if (empty && !fl.optional && !(fl.name === 'prompt' && extra.tool === 'motion')) return toast('Заполните все поля');
+      if (empty && !fl.optional) return toast('Заполните все поля');
       if (fl.type === 'file' && !(v && v.size)) fd.delete(fl.name);
     }
     Object.entries(extra).forEach(([k, v]) => fd.append(k, v));
@@ -274,32 +306,62 @@ function bindForm(extra, fields) {
 
 /* ---------- Пополнить ---------- */
 function renderTopup() {
+  const pay = state.me.payments;
   $view.innerHTML = `
     ${balanceHtml()}
     <h1>Пополнить</h1>
-    <p class="sub">Оплата через Telegram Stars ⭐</p>
+    <p class="sub">${pay.card ? 'Карта, СБП, T-Pay, SberPay' : ''}${pay.card && pay.stars ? ' или ' : ''}${pay.stars ? 'Telegram Stars ⭐' : ''}</p>
     ${state.me.packages.map((p) => `
-      <button class="pkg" data-pkg="${p.id}">
-        <span style="font-size:30px">🪙</span>
-        <span><span class="big">${p.credits}</span> монет${p.badge ? `<span class="tag">${esc(p.badge)}</span>` : ''}</span>
-        <span class="price">⭐ ${p.stars}</span>
-      </button>`).join('')}
+      <div class="pkg">
+        <div class="pkg-head">
+          <span style="font-size:30px">🪙</span>
+          <span><span class="big">${p.credits}</span> монет${p.badge ? `<span class="tag">${esc(p.badge)}</span>` : ''}</span>
+        </div>
+        <div class="pkg-actions">
+          ${pay.card ? `<button class="pay-card" data-card="${p.id}">💳 ${p.rub} ₽</button>` : ''}
+          ${pay.stars ? `<button class="pay-stars" data-stars="${p.id}">⭐ ${p.stars}</button>` : ''}
+        </div>
+      </div>`).join('')}
     <div class="section-label">Цены</div>
-    ${Object.values(state.me.tools).map((t) => `<div class="list-item"><span>${esc(t.title)}</span><span>${t.cost} 🪙</span></div>`).join('')}`;
+    ${Object.values(state.me.tools).map((t) => `<div class="list-item"><span>${esc(t.title)}</span><span>${t.variants ? 'от ' : ''}${t.cost} 🪙</span></div>`).join('')}`;
   bindCommon();
-  $view.querySelectorAll('[data-pkg]').forEach((b) => b.onclick = async () => {
+  const post = (url, pkg) => api(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ package: pkg }) });
+
+  $view.querySelectorAll('[data-card]').forEach((b) => b.onclick = async () => {
+    haptic();
+    b.disabled = true;
+    try {
+      const { link } = await post('/api/pay/card', b.dataset.card);
+      tg?.openLink ? tg.openLink(link) : window.open(link, '_blank');
+      toast('После оплаты монеты зачислятся автоматически');
+      waitForBalance();
+    } catch (e) { toast(e.message); }
+    b.disabled = false;
+  });
+
+  $view.querySelectorAll('[data-stars]').forEach((b) => b.onclick = async () => {
     haptic();
     try {
-      const { link } = await api('/api/invoice', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ package: b.dataset.pkg }) });
+      const { link } = await post('/api/pay/stars', b.dataset.stars);
       if (!tg?.openInvoice) return window.open(link, '_blank');
-      tg.openInvoice(link, async (status) => {
-        if (status === 'paid') {
-          toast('Оплата прошла! Монеты зачислены');
-          setTimeout(async () => { await loadMe(); render(); }, 1500);
-        }
-      });
+      tg.openInvoice(link, (status) => { if (status === 'paid') { toast('Оплата прошла!'); waitForBalance(); } });
     } catch (e) { toast(e.message); }
   });
+}
+
+// После оплаты несколько минут проверяем баланс и обновляем экран, когда монеты придут
+function waitForBalance() {
+  const before = state.me.user.balance;
+  let tries = 0;
+  const tick = async () => {
+    if (++tries > 60) return;
+    try {
+      await loadMe();
+      if (state.me.user.balance !== before) { toast('Монеты зачислены 🎉'); render(); return; }
+    } catch { /* сеть */ }
+    setTimeout(tick, 5000);
+  };
+  setTimeout(tick, 3000);
 }
 
 /* ---------- История ---------- */
@@ -362,9 +424,14 @@ function renderProfile() {
     <div class="list-item"><span>Баланс</span><b>${u.balance} 🪙</b></div>
     <button class="list-item" data-go="topup"><span>Пополнить баланс</span>${icons.chev}</button>
     <button class="list-item" data-go="history"><span>Мои генерации</span>${icons.chev}</button>
+    ${state.me.support ? `<button class="list-item" id="support"><span>Поддержка</span>${icons.chev}</button>` : ''}
     ${refHtml()}`;
   bindCommon();
   bindRef();
+  $view.querySelector('#support')?.addEventListener('click', () => {
+    const url = `https://t.me/${state.me.support}`;
+    tg?.openTelegramLink ? tg.openTelegramLink(url) : window.open(url, '_blank');
+  });
 }
 
 /* ---------- Рефералы ---------- */
