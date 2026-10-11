@@ -68,7 +68,7 @@
 | Токен бота | [@BotFather](https://t.me/BotFather) → `/newbot` | бесплатно |
 | Ключ нейросетей | [fal.ai](https://fal.ai) → Dashboard → Keys, затем пополнить баланс | оплата по факту, нужна зарубежная карта |
 | Сервер (VPS) | любой хостинг с Ubuntu, 1–2 ГБ памяти; лучше за рубежом (Нидерланды, Финляндия) | ≈ 300–600 ₽/мес |
-| Домен | reg.ru, nic.ru и т.п.; направьте A-запись на IP сервера | ≈ 200–1000 ₽/год |
+| Домен (можно без него) | бесплатно: `IP-сервера-через-дефисы.sslip.io`, например `45-12-34-56.sslip.io`; или купить на reg.ru и направить A-запись на IP | 0 ₽ или ≈ 200–1000 ₽/год |
 | ЮKassa | [yookassa.ru](https://yookassa.ru), подключается на самозанятого или ИП | ≈ 3% с платежа |
 
 ### 2. Установка на сервер
@@ -77,7 +77,7 @@
 
 ```bash
 curl -fsSL https://get.docker.com | sh
-git clone <ссылка на этот репозиторий> bot && cd bot
+git clone -b claude/telegram-video-bot https://github.com/gevorg1arkasha123-ux/123.git bot && cd bot
 cp .env.example .env
 nano .env      # заполните BOT_TOKEN, DOMAIN, PUBLIC_URL, FAL_KEY, ADMIN_IDS
 docker compose up -d
