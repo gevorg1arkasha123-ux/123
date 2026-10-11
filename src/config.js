@@ -13,6 +13,8 @@ export const config = {
   publicUrl: (process.env.PUBLIC_URL || 'http://localhost:3000').replace(/\/$/, ''),
   port: num(process.env.PORT, 3000),
   falKey: process.env.FAL_KEY || '',
+  // Ключ https://polza.ai — российский посредник с оплатой в рублях (картой РФ / СБП). Если задан, используется вместо fal.ai
+  polzaKey: process.env.POLZA_API_KEY || '',
   adminIds: (process.env.ADMIN_IDS || '').split(',').map((s) => s.trim()).filter(Boolean),
   startBonus: num(process.env.START_BONUS, 50),
   supportUsername: (process.env.SUPPORT_USERNAME || '').replace(/^@/, ''),
@@ -39,7 +41,9 @@ export const config = {
 };
 config.dbPath = process.env.DB_PATH || path.join(config.dataDir, 'app.db');
 
-export const mockMode = !config.falKey;
+// Кто генерирует: polza (рубли) → fal (доллары) → демо-режим без ключей
+export const provider = config.polzaKey ? 'polza' : config.falKey ? 'fal' : 'mock';
+export const mockMode = provider === 'mock';
 export const yookassaEnabled = Boolean(config.yookassaShopId && config.yookassaSecret);
 
 // Цена в монетах = себестоимость на fal.ai ($) × курс × наценка / цена монеты
@@ -106,6 +110,26 @@ const toolDefs = {
     model: 'fal-ai/clarity-upscaler',
   },
 };
+
+// Модели Polza.ai и ПРИМЕРНАЯ себестоимость одного запуска в ₽ (цены: https://polza.ai/models).
+// В режиме polza себестоимость пересчитывается в falUsd = rub / USD_RUB, поэтому цены, /stats и /prices работают как раньше.
+export const polzaModels = {
+  video: {
+    kling: { model: 'kling/v3', rub: 70 }, // 14 ₽/сек со звуком × 5 сек
+    seedance: { model: 'bytedance/seedance-2', rub: 140 }, // ~28 ₽/сек 720p × 5 сек
+  },
+  template: { model: 'kling/v3-motion-control', i2vModel: 'kling/v3', rub: 140 }, // 14 ₽/сек 720p, до ~10 сек
+  motion: { model: 'kling/v3-motion-control', rub: 140 },
+  image: { model: 'google/gemini-nano-banana-2.1', rub: 3 },
+  tryon: { model: 'google/gemini-nano-banana-2.1', rub: 3 },
+  tts: { model: 'elevenlabs/eleven-v4', rub: 2 }, // ~1,2 ₽ за 1000 символов
+  audio: { model: 'suno/sounds', rub: 2 },
+  upscale: { model: 'topaz/image-upscale', rub: 7.5 },
+};
+if (provider === 'polza') {
+  for (const [k, v] of Object.entries(polzaModels.video)) videoModels[k].falUsd = v.rub / config.usdRub;
+  for (const [k, v] of Object.entries(polzaModels)) if (toolDefs[k] && v.rub) toolDefs[k].falUsd = v.rub / config.usdRub;
+}
 
 export const tools = Object.fromEntries(Object.entries(toolDefs).map(([k, t]) => {
   if (!t.variants) return [k, { ...t, cost: priceFor(t.falUsd) }];

@@ -3,7 +3,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import express from 'express';
 import multer from 'multer';
-import { ROOT, config, mockMode, yookassaEnabled, packages, tools, loadTemplates } from './config.js';
+import { ROOT, config, mockMode, provider, yookassaEnabled, packages, tools, loadTemplates } from './config.js';
 import { verifyInitData } from './auth.js';
 import { upsertUser, getUser, userJobs, refStats } from './db.js';
 import { startJob, startPoller, setNotifier } from './generate.js';
@@ -120,7 +120,8 @@ app.use((err, _req, res, _next) => {
 
 app.listen(config.port, () => {
   console.log(`Сервер: http://localhost:${config.port}  (публичный адрес: ${config.publicUrl})`);
-  if (mockMode) console.log('FAL_KEY не задан — работает ДЕМО-режим, генерация имитируется.');
+  if (mockMode) console.log('POLZA_API_KEY и FAL_KEY не заданы — работает ДЕМО-режим, генерация имитируется.');
+  else console.log(`Генерация через ${provider === 'polza' ? 'Polza.ai (рубли)' : 'fal.ai'}`);
   if (!yookassaEnabled) console.log('ЮKassa не настроена — оплата картой/СБП скрыта, доступны только Stars.');
 });
 
