@@ -56,16 +56,16 @@ export const packages = [
   { id: 'p2490', rub: 2490, credits: 3200, title: '3200 монет', badge: '+28%' },
 ].map((p) => ({ ...p, stars: starsFor(p.rub) }));
 
-// Нейросети для видео по описанию и «оживления» фото — клиент выбирает сам.
+// Два уровня качества для видео по описанию и «оживления» фото. Клиент видит только «Стандарт» и «Премиум».
 // falUsd — ПРИМЕРНАЯ себестоимость одного ролика на fal.ai. Сверьте с ценой на странице модели.
 const videoModels = {
   kling: {
-    title: 'Kling 3', desc: '5 сек · со звуком', falUsd: 0.5,
+    title: 'Стандарт', desc: '5 сек · со звуком · быстро', falUsd: 0.5, // Kling 3
     t2v: 'fal-ai/kling-video/v3/standard/text-to-video',
     i2v: 'fal-ai/kling-video/v3/standard/image-to-video',
   },
   seedance: {
-    title: 'Seedance 2', desc: '5 сек · кино-качество', falUsd: 1.55,
+    title: 'Премиум', desc: '5 сек · со звуком · кино-качество', falUsd: 1.55, // Seedance 2
     t2v: 'bytedance/seedance-2.0/text-to-video',
     i2v: 'bytedance/seedance-2.0/image-to-video',
   },

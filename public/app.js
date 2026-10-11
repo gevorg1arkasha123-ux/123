@@ -200,7 +200,7 @@ function renderCreate() {
     <button class="banner" data-go="home"><span class="ic">${icons.grid}</span><span><b>Начните с готового шаблона</b><small>Выберите сюжет и добавьте фото</small></span><span class="chev">${icons.chev}</span></button>
     <div class="section-label">Все инструменты</div>
     <button class="feature" data-tool="t2v">
-      <span class="txt"><span class="new">KLING 3 · SEEDANCE 2</span><h3>Видео по описанию</h3><p>Опишите сцену словами — получите ролик со звуком.</p>
+      <span class="txt"><span class="new">СО ЗВУКОМ</span><h3>Видео по описанию</h3><p>Опишите сцену словами — получите ролик со звуком.</p>
       <span class="pill"><span class="pill-tag">от ${state.me?.tools.t2v.cost ?? ''} 🪙</span><span class="round">${icons.arrow}</span></span></span>
       <span class="art" style="background:linear-gradient(160deg,#00c6ff,#7b2ff7 60%,#f107a3)">🎥</span>
     </button>
@@ -224,7 +224,7 @@ function renderCreate() {
 function fieldHtml(f, toolKey) {
   if (f.type === 'variant') {
     const vs = Object.entries(state.me.tools[toolKey].variants);
-    return `<div class="field"><label>Нейросеть</label><div class="variants">${vs.map(([k, v], i) => `
+    return `<div class="field"><label>Качество</label><div class="variants">${vs.map(([k, v], i) => `
       <label class="variant"><input type="radio" name="variant" value="${k}" ${i ? '' : 'checked'}>
       <span><b>${esc(v.title)}</b><small>${esc(v.desc)}</small><em>${v.cost} 🪙</em></span></label>`).join('')}</div></div>`;
   }
