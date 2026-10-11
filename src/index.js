@@ -5,9 +5,9 @@ import express from 'express';
 import multer from 'multer';
 import { ROOT, config, mockMode, packages, tools, loadTemplates } from './config.js';
 import { verifyInitData } from './auth.js';
-import { upsertUser, getUser, userJobs } from './db.js';
+import { upsertUser, getUser, userJobs, refStats } from './db.js';
 import { startJob, startPoller, setNotifier } from './generate.js';
-import { bot, createInvoice, notifyJob } from './bot.js';
+import { bot, createInvoice, notifyJob, refLink, parseRef } from './bot.js';
 
 fs.mkdirSync(config.uploadsDir, { recursive: true });
 
@@ -34,7 +34,7 @@ app.use('/api', (req, res, next) => {
   let tgUser = verifyInitData(req.get('X-Init-Data'));
   if (!tgUser && config.devAuth) tgUser = { id: 1, first_name: 'Dev', username: 'dev' };
   if (!tgUser) return res.status(401).json({ error: 'Откройте приложение через Telegram' });
-  req.user = upsertUser(tgUser, config.startBonus);
+  req.user = upsertUser(tgUser, config.startBonus, parseRef(tgUser.start_param));
   next();
 });
 
@@ -43,6 +43,7 @@ app.get('/api/me', (req, res) => {
     user: getUser(req.user.id),
     mock: mockMode,
     packages,
+    ref: { link: refLink(req.user.id), percent: config.refPercent, earned: getUser(req.user.id).ref_earned, ...refStats(req.user.id) },
     tools: Object.fromEntries(Object.entries(tools).map(([k, v]) => [k, { title: v.title, cost: v.cost, kind: v.kind }])),
   });
 });
@@ -67,6 +68,7 @@ app.post('/api/generate', fileFields, async (req, res) => {
   const url = (k) => (f[k]?.[0] ? `${config.publicUrl}/uploads/${f[k][0].filename}` : undefined);
   const params = { prompt: (prompt || '').trim().slice(0, 2000), voice, image_url: url('image'), image2_url: url('image2'), video_url: url('video') };
 
+  if (tool === 'tts') params.prompt = params.prompt.slice(0, 1000); // себестоимость озвучки зависит от длины текста
   if (!tools[tool]) return res.status(400).json({ error: 'Неизвестный инструмент' });
   let template;
   if (tool === 'template') {
@@ -103,6 +105,11 @@ startPoller();
 if (bot) {
   await bot.api.setChatMenuButton({ menu_button: { type: 'web_app', text: 'Открыть', web_app: { url: config.publicUrl } } })
     .catch((e) => console.warn('Не удалось поставить кнопку меню (нужен HTTPS PUBLIC_URL):', e.message));
+  await bot.api.setMyCommands([
+    { command: 'start', description: 'Открыть приложение' },
+    { command: 'balance', description: 'Мой баланс' },
+    { command: 'invite', description: 'Пригласить друга и получать бонусы' },
+  ]).catch(() => {});
   bot.start({ onStart: (me) => console.log(`Бот @${me.username} запущен`) });
 } else {
   console.log('BOT_TOKEN не задан — бот не запущен, работает только веб-часть.');

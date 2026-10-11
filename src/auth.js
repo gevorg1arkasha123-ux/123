@@ -19,7 +19,8 @@ export function verifyInitData(initData, maxAgeSec = 24 * 3600) {
   const authDate = Number(params.get('auth_date') || 0);
   if (maxAgeSec && Date.now() / 1000 - authDate > maxAgeSec) return null;
   try {
-    return JSON.parse(params.get('user'));
+    // start_param — параметр из ссылки t.me/<bot>/<app>?startapp=..., используем для рефералов
+    return { ...JSON.parse(params.get('user')), start_param: params.get('start_param') };
   } catch {
     return null;
   }

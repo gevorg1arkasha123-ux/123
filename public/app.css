@@ -123,6 +123,14 @@ textarea:focus, select:focus { border-color: var(--accent); }
 .profile-card { padding: 20px; border-radius: var(--radius); background: var(--card); border: 1px solid var(--border); display: flex; gap: 16px; align-items: center; }
 .avatar { width: 64px; height: 64px; border-radius: 50%; background: linear-gradient(135deg, #9b30ff, #f107a3); display: grid; place-items: center; font-size: 26px; font-weight: 700; }
 .list-item { width: 100%; padding: 16px; border-radius: 16px; background: var(--card); border: 1px solid var(--border); margin-top: 10px; display: flex; justify-content: space-between; text-align: left; }
+.ref { margin-top: 18px; padding: 20px; border-radius: var(--radius); border: 1px solid #5a2a96; background: linear-gradient(160deg, #22143a, #15121f); }
+.ref-title { font-size: 20px; font-weight: 700; margin-bottom: 6px; }
+.ref-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 16px 0; }
+.ref-stats div { padding: 12px 6px; border-radius: 14px; background: rgba(255,255,255,.05); text-align: center; }
+.ref-stats b { display: block; font-size: 18px; }
+.ref-stats small { color: var(--muted); font-size: 12px; }
+.ref-link { padding: 12px 14px; border-radius: 14px; background: var(--bg); border: 1px dashed #5a2a96; font-size: 14px; color: #d6a8ff; word-break: break-all; cursor: pointer; }
+.ref .cta { margin-top: 12px; }
 .demo-note { margin-bottom: 14px; padding: 10px 14px; border-radius: 14px; background: #2a2210; color: #ffcf6b; font-size: 14px; }
 
 /* tabbar */

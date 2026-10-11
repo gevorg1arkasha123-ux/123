@@ -73,7 +73,8 @@ export async function startJob({ userId, tool, params, template }) {
     err.code = 'NO_BALANCE';
     throw err;
   }
-  const jobId = createJob({ userId, tool, title, kind, cost, model });
+  const falUsd = mockMode ? 0 : (template?.falUsd ?? t.falUsd);
+  const jobId = createJob({ userId, tool, title, kind, cost, model, falUsd });
 
   if (mockMode) {
     // Демо-режим без FAL_KEY: через 4 секунды «готово», в результате — загруженный файл или превью шаблона

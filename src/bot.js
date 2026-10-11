@@ -1,20 +1,64 @@
 import { Bot, InlineKeyboard, InputFile } from 'grammy';
-import { config, packages } from './config.js';
-import { upsertUser, getUser, recordPayment, addBalance } from './db.js';
+import { config, packages, tools } from './config.js';
+import { upsertUser, getUser, recordPayment, addBalance, stats } from './db.js';
 
 export const bot = config.botToken ? new Bot(config.botToken) : null;
 
 const appButton = () => new InlineKeyboard().webApp('🎬 Открыть приложение', config.publicUrl);
+const isAdmin = (ctx) => config.adminIds.includes(String(ctx.from.id));
+
+// Реферальная ссылка вида https://t.me/<bot>?start=ref_<id>
+export const refLink = (userId) => (bot?.botInfo ? `https://t.me/${bot.botInfo.username}?start=ref_${userId}` : null);
+export const parseRef = (s) => Number(/^ref_(\d+)$/.exec(s || '')?.[1]) || null;
 
 if (bot) {
   bot.command('start', async (ctx) => {
-    const u = upsertUser(ctx.from, config.startBonus);
+    const isNew = !getUser(ctx.from.id);
+    const u = upsertUser(ctx.from, config.startBonus, parseRef(ctx.match));
+    if (isNew && u.referrer_id) {
+      bot.api.sendMessage(u.referrer_id, `🎉 По вашей ссылке пришёл новый пользователь! Вы будете получать ${config.refPercent}% монет с каждой его покупки.`).catch(() => {});
+    }
     await ctx.reply(
       `Привет, ${ctx.from.first_name || 'друг'}! 👋\n\n`
       + 'Здесь можно сделать видео по готовому шаблону, сгенерировать картинку, озвучку и многое другое.\n\n'
       + `💰 Баланс: ${u.balance} монет\n\nЖми кнопку ниже 👇`,
       { reply_markup: appButton() },
     );
+  });
+
+  bot.command('invite', async (ctx) => {
+    upsertUser(ctx.from, config.startBonus);
+    await ctx.reply(`Приглашайте друзей и получайте ${config.refPercent}% монет с каждой их покупки 🎁\n\nВаша ссылка:\n${refLink(ctx.from.id)}`);
+  });
+
+  // Сводка доходов и расходов — только для админов
+  bot.command('stats', async (ctx) => {
+    if (!isAdmin(ctx)) return;
+    const s = stats();
+    const usd = (n) => `$${n.toFixed(2)}`;
+    const rev = s.stars * config.starUsd;
+    const revDay = s.starsDay * config.starUsd;
+    await ctx.reply(
+      '📊 Статистика\n\n'
+      + `👥 Пользователи: ${s.users} (+${s.usersDay} за сутки), платящих: ${s.payers}\n`
+      + `🎬 Генераций: ${s.jobs} (${s.jobsDay} за сутки)\n\n`
+      + `⭐ Получено звёзд: ${s.stars} ≈ ${usd(rev)} (за сутки ${s.starsDay} ≈ ${usd(revDay)})\n`
+      + `🤖 Потрачено на fal.ai ≈ ${usd(s.falUsd)} (за сутки ${usd(s.falUsdDay)})\n`
+      + `🎁 Выдано реферальных монет: ${s.refPaid}\n\n`
+      + `💵 Прибыль ≈ ${usd(rev - s.falUsd)} (за сутки ${usd(revDay - s.falUsdDay)})\n\n`
+      + 'Расходы fal.ai — оценка по falUsd из config.js. Точные цифры — в личном кабинете fal.ai. '
+      + 'Сервер в расчёт не входит. Звёзды можно вывести через Fragment не раньше чем через 21 день.',
+    );
+  });
+
+  // Цены, себестоимость и маржа по каждому инструменту — только для админов
+  bot.command('prices', async (ctx) => {
+    if (!isAdmin(ctx)) return;
+    const lines = Object.values(tools).map((t) => {
+      const income = t.cost * config.starUsd;
+      return `${t.title}: ${t.cost} мон. ≈ $${income.toFixed(2)} | fal ≈ $${t.falUsd.toFixed(2)} | прибыль ≈ $${(income - t.falUsd).toFixed(2)}`;
+    });
+    await ctx.reply(`💰 Наценка ×${config.markup}, 1 звезда ≈ $${config.starUsd}\n\n${lines.join('\n')}`);
   });
 
   bot.command('balance', async (ctx) => {
@@ -24,7 +68,7 @@ if (bot) {
 
   // /give <user_id> <amount> — только для админов
   bot.command('give', async (ctx) => {
-    if (!config.adminIds.includes(String(ctx.from.id))) return;
+    if (!isAdmin(ctx)) return;
     const [id, amount] = ctx.match.split(/\s+/).map(Number);
     if (!id || !amount || !getUser(id)) return ctx.reply('Использование: /give <user_id> <монеты>');
     addBalance(id, amount);
@@ -38,8 +82,15 @@ if (bot) {
     const pkg = packages.find((x) => p.invoice_payload === `pkg:${x.id}:${ctx.from.id}`);
     if (!pkg) return;
     upsertUser(ctx.from, config.startBonus);
-    recordPayment(p.telegram_payment_charge_id, ctx.from.id, p.total_amount, pkg.credits);
+    const r = recordPayment(p.telegram_payment_charge_id, ctx.from.id, p.total_amount, pkg.credits, config.refPercent);
+    if (!r) return;
     await ctx.reply(`✅ Зачислено ${pkg.credits} монет. Баланс: ${getUser(ctx.from.id).balance}`, { reply_markup: appButton() });
+    if (r.bonus > 0) {
+      bot.api.sendMessage(r.referrerId, `🎁 Ваш друг пополнил баланс — вам начислено ${r.bonus} монет!`).catch(() => {});
+    }
+    for (const admin of config.adminIds) {
+      bot.api.sendMessage(admin, `💸 Оплата: ${p.total_amount} ⭐ от ${ctx.from.first_name || ''} ${ctx.from.username ? '@' + ctx.from.username : ''} (${ctx.from.id})`).catch(() => {});
+    }
   });
 
   bot.catch((err) => console.error('bot error', err.error));

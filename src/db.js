@@ -42,18 +42,52 @@ CREATE TABLE IF NOT EXISTS payments (
 );
 `);
 
+// Миграции для баз, созданных предыдущей версией
+const addColumn = (table, col, def) => {
+  const cols = db.prepare(`PRAGMA table_info(${table})`).all().map((c) => c.name);
+  if (!cols.includes(col)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${col} ${def}`);
+};
+addColumn('users', 'referrer_id', 'INTEGER');
+addColumn('users', 'ref_earned', 'INTEGER NOT NULL DEFAULT 0');
+addColumn('jobs', 'fal_usd', 'REAL NOT NULL DEFAULT 0');
+
 const now = () => Date.now();
 
-export function upsertUser(u, bonus) {
+// referrerId учитывается только при первой регистрации и если пригласивший существует
+export function upsertUser(u, bonus, referrerId) {
   const existing = db.prepare('SELECT * FROM users WHERE id = ?').get(u.id);
   if (existing) {
     db.prepare('UPDATE users SET username = ?, first_name = ? WHERE id = ?')
       .run(u.username || null, u.first_name || null, u.id);
     return { ...existing, username: u.username, first_name: u.first_name };
   }
-  db.prepare('INSERT INTO users (id, username, first_name, balance, created_at) VALUES (?, ?, ?, ?, ?)')
-    .run(u.id, u.username || null, u.first_name || null, bonus, now());
-  return db.prepare('SELECT * FROM users WHERE id = ?').get(u.id);
+  const ref = referrerId && referrerId !== u.id && getUser(referrerId) ? referrerId : null;
+  db.prepare('INSERT INTO users (id, username, first_name, balance, referrer_id, created_at) VALUES (?, ?, ?, ?, ?, ?)')
+    .run(u.id, u.username || null, u.first_name || null, bonus, ref, now());
+  return getUser(u.id);
+}
+
+export const refStats = (userId) => db.prepare(`
+  SELECT COUNT(*) AS invited,
+         COALESCE(SUM(EXISTS(SELECT 1 FROM payments p WHERE p.user_id = u.id)), 0) AS paying
+  FROM users u WHERE referrer_id = ?`).get(userId);
+
+// Сводка для владельца бота
+export function stats() {
+  const day = Date.now() - 24 * 3600 * 1000;
+  const q = (sql, ...a) => db.prepare(sql).get(...a);
+  return {
+    users: q('SELECT COUNT(*) n FROM users').n,
+    usersDay: q('SELECT COUNT(*) n FROM users WHERE created_at > ?', day).n,
+    payers: q('SELECT COUNT(DISTINCT user_id) n FROM payments').n,
+    stars: q('SELECT COALESCE(SUM(stars),0) n FROM payments').n,
+    starsDay: q('SELECT COALESCE(SUM(stars),0) n FROM payments WHERE created_at > ?', day).n,
+    jobs: q("SELECT COUNT(*) n FROM jobs WHERE status = 'done'").n,
+    jobsDay: q("SELECT COUNT(*) n FROM jobs WHERE status = 'done' AND created_at > ?", day).n,
+    falUsd: q("SELECT COALESCE(SUM(fal_usd),0) n FROM jobs WHERE status = 'done'").n,
+    falUsdDay: q("SELECT COALESCE(SUM(fal_usd),0) n FROM jobs WHERE status = 'done' AND created_at > ?", day).n,
+    refPaid: q('SELECT COALESCE(SUM(ref_earned),0) n FROM users').n,
+  };
 }
 
 export const getUser = (id) => db.prepare('SELECT * FROM users WHERE id = ?').get(id);
@@ -69,17 +103,24 @@ export function chargeBalance(userId, amount) {
   return r.changes === 1;
 }
 
-export const recordPayment = db.transaction((chargeId, userId, stars, credits) => {
-  const r = db.prepare('INSERT OR IGNORE INTO payments VALUES (?, ?, ?, ?, ?)')
+// Зачисляет покупку и реферальный бонус пригласившему. Возвращает { referrerId, bonus } или null при дубле.
+export const recordPayment = db.transaction((chargeId, userId, stars, credits, refPercent) => {
+  const r = db.prepare('INSERT OR IGNORE INTO payments (charge_id, user_id, stars, credits, created_at) VALUES (?, ?, ?, ?, ?)')
     .run(chargeId, userId, stars, credits, now());
-  if (r.changes) addBalance(userId, credits);
-  return r.changes === 1;
+  if (!r.changes) return null;
+  addBalance(userId, credits);
+  const referrerId = getUser(userId)?.referrer_id;
+  const bonus = referrerId ? Math.floor((credits * refPercent) / 100) : 0;
+  if (bonus > 0) {
+    db.prepare('UPDATE users SET balance = balance + ?, ref_earned = ref_earned + ? WHERE id = ?').run(bonus, bonus, referrerId);
+  }
+  return { referrerId, bonus };
 });
 
 export function createJob(j) {
   const t = now();
-  const r = db.prepare(`INSERT INTO jobs (user_id, tool, title, kind, cost, status, model, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, 'queued', ?, ?, ?)`).run(j.userId, j.tool, j.title, j.kind, j.cost, j.model, t, t);
+  const r = db.prepare(`INSERT INTO jobs (user_id, tool, title, kind, cost, status, model, fal_usd, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, 'queued', ?, ?, ?, ?)`).run(j.userId, j.tool, j.title, j.kind, j.cost, j.model, j.falUsd || 0, t, t);
   return r.lastInsertRowid;
 }
 

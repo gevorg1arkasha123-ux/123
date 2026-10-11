@@ -362,9 +362,39 @@ function renderProfile() {
     <div class="list-item"><span>Баланс</span><b>${u.balance} 🪙</b></div>
     <button class="list-item" data-go="topup"><span>Пополнить баланс</span>${icons.chev}</button>
     <button class="list-item" data-go="history"><span>Мои генерации</span>${icons.chev}</button>
-    ${bot ? `<button class="list-item" id="share"><span>Поделиться ботом</span>${icons.chev}</button>` : ''}`;
+    ${refHtml()}`;
   bindCommon();
-  $view.querySelector('#share')?.addEventListener('click', () => tg.openTelegramLink(`https://t.me/share/url?url=https://t.me/${bot}`));
+  bindRef();
+}
+
+/* ---------- Рефералы ---------- */
+function refHtml() {
+  const r = state.me.ref;
+  if (!r?.link) return '';
+  return `
+    <div class="ref">
+      <div class="ref-title">🎁 Приглашай друзей</div>
+      <p class="hint">Получай <b style="color:#fff">${r.percent}%</b> монет с каждого пополнения друга — навсегда.</p>
+      <div class="ref-stats">
+        <div><b>${r.invited}</b><small>приглашено</small></div>
+        <div><b>${r.paying}</b><small>купили</small></div>
+        <div><b>${r.earned} 🪙</b><small>заработано</small></div>
+      </div>
+      <div class="ref-link" id="refCopy">${esc(r.link)}</div>
+      <button class="cta" id="refShare">Пригласить друга</button>
+    </div>`;
+}
+
+function bindRef() {
+  const r = state.me.ref;
+  $view.querySelector('#refCopy')?.addEventListener('click', async () => {
+    try { await navigator.clipboard.writeText(r.link); toast('Ссылка скопирована'); } catch { toast(r.link); }
+  });
+  $view.querySelector('#refShare')?.addEventListener('click', () => {
+    const text = 'Делаю крутые AI-видео из своих фото 🔥 Попробуй — новым пользователям бонусные монеты!';
+    const url = `https://t.me/share/url?url=${encodeURIComponent(r.link)}&text=${encodeURIComponent(text)}`;
+    tg?.openTelegramLink ? tg.openTelegramLink(url) : window.open(url, '_blank');
+  });
 }
 
 /* ---------- start ---------- */
