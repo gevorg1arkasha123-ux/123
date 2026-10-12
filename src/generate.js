@@ -33,8 +33,8 @@ export function buildPolzaRequest(tool, p, template) {
   const m = polzaModels;
   const sound = true;
   const video = (variant, extra) => (variant === 'seedance'
-    ? { model: m.video.seedance.model, input: { resolution: '720p', duration: 5, generate_audio: sound, ...extra } }
-    : { model: m.video.kling.model, input: { mode: 'std', duration: 5, sound, ...extra } });
+    ? { model: m.video.seedance.model, input: { resolution: '720p', duration: '5', generate_audio: sound, ...extra } }
+    : { model: m.video.kling.model, input: { mode: 'std', duration: '5', sound, ...extra } });
   switch (tool) {
     case 'template':
       if (template.type === 'motion') {
@@ -43,7 +43,7 @@ export function buildPolzaRequest(tool, p, template) {
           input: { prompt: template.prompt || '', images: [p.image_url], videos: [template.video], mode: '720p', character_orientation: 'video' },
         };
       }
-      return { model: m.template.i2vModel, input: { prompt: template.prompt, images: [p.image_url], mode: 'std', duration: 5, sound } };
+      return { model: m.template.i2vModel, input: { prompt: template.prompt, images: [p.image_url], mode: 'std', duration: '5', sound } };
     case 't2v':
       return video(p.variant, { prompt: p.prompt, aspect_ratio: p.aspect || '9:16' });
     case 'i2v':
