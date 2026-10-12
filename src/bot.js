@@ -46,10 +46,9 @@ const ADMIN_HELP = `🛠 Команды владельца
 /give <user_id> <монеты> — начислить монеты
 /broadcast <текст> — рассылка всем пользователям
 
-➕ Новый шаблон-тренд: отправьте мне видео (до 20 МБ, 3–30 сек) с подписью:
-Название | Категория | Подсказка для клиента
-
-Например: Танец с котом | Тренды | Фото в полный рост
+➕ Новый шаблон-тренд: просто отправьте мне видео (до 20 МБ, лучше 5–10 сек) — я спрошу название.
+Можно сразу подписью: Название (категория будет «Тренды»).
+Для тонкой настройки: Название | Категория | Подсказка для клиента
 Движения из видео будут переноситься на фото клиента.`;
 
 if (bot) {
@@ -170,17 +169,39 @@ if (bot) {
     await ctx.editMessageText(`${ctx.callbackQuery.message.text}\n\n🗑 Удалён`).catch(() => {});
   });
 
-  // Админ присылает видео с подписью «Название | Категория | Подсказка» → новый шаблон-тренд
+  // Админ присылает видео → новый шаблон-тренд. Подпись (необязательно): «Название» или «Название | Категория | Подсказка».
+  // Без подписи бот спросит название следующим сообщением.
+  const pendingTemplates = new Map(); // adminId → видео, ждущее названия
   bot.on(['message:video', 'message:animation', 'message:document'], async (ctx, next) => {
     if (!isAdmin(ctx)) return next();
     const media = ctx.message.video || ctx.message.animation || ctx.message.document;
     if (ctx.message.document && !/^video\//.test(media.mime_type || '')) return next();
-    const [title, category, hint] = (ctx.message.caption || '').split('|').map((s) => s.trim());
-    if (!title) return ctx.reply('Добавьте подпись к видео: Название | Категория | Подсказка');
-    if (media.file_size > 20 * 1024 * 1024) return ctx.reply('Видео больше 20 МБ — Telegram не даст боту его скачать. Сожмите и пришлите снова.');
+    if (media.file_size > 20 * 1024 * 1024) return ctx.reply('Видео больше 20 МБ — Telegram не даст боту его скачать. Сожмите или обрежьте его и пришлите снова.');
+    const caption = (ctx.message.caption || '').trim();
+    if (!caption) {
+      pendingTemplates.set(ctx.from.id, media.file_id);
+      return ctx.reply('🎬 Как назвать шаблон? Напиши название одним сообщением (или /cancel).');
+    }
+    return saveTemplate(ctx, media.file_id, caption);
+  });
+
+  bot.command('cancel', async (ctx, next) => {
+    if (!pendingTemplates.delete(ctx.from?.id)) return next();
+    return ctx.reply('Ок, шаблон не добавляю.');
+  });
+
+  bot.on('message:text', async (ctx, next) => {
+    const fileId = pendingTemplates.get(ctx.from?.id);
+    if (!fileId || !isAdmin(ctx) || ctx.message.text.startsWith('/')) return next();
+    pendingTemplates.delete(ctx.from.id);
+    return saveTemplate(ctx, fileId, ctx.message.text.trim());
+  });
+
+  async function saveTemplate(ctx, fileId, text) {
+    const [title, category, hint] = text.split('|').map((x) => x.trim());
     const msg = await ctx.reply('⏳ Сохраняю шаблон…');
     try {
-      const url = await saveTelegramFile(media.file_id, '.mp4');
+      const url = await saveTelegramFile(fileId, '.mp4');
       const id = `t${Date.now().toString(36)}`;
       addTemplate({ id, title, category: category || 'Тренды', hint: hint || 'Фото в полный рост, хорошо видно лицо', video: url, preview: url });
       await bot.api.editMessageText(ctx.chat.id, msg.message_id, `✅ Шаблон «${title}» добавлен и уже виден в приложении.\nid: ${id}`, {
@@ -189,7 +210,7 @@ if (bot) {
     } catch (e) {
       await bot.api.editMessageText(ctx.chat.id, msg.message_id, `❌ ${e.message}`);
     }
-  });
+  }
 
   /* ---------- оплата Telegram Stars ---------- */
   bot.on('pre_checkout_query', (ctx) => ctx.answerPreCheckoutQuery(true));
