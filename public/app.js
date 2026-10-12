@@ -173,7 +173,7 @@ function openTemplate(id) {
   push({
     render() {
       const media = t.preview
-        ? (isImg(t.preview) ? `<img src="${esc(t.preview)}">` : `<video src="${esc(t.preview)}#t=0.1" autoplay muted loop playsinline controls preload="metadata"></video><button type="button" class="sound-btn" id="soundBtn">🔊 Смотреть со звуком</button>`)
+        ? (isImg(t.preview) ? `<img src="${esc(t.preview)}">` : `<video src="${esc(t.preview)}#t=0.1" autoplay muted loop playsinline controls preload="metadata"></video>`)
         : `<span>${esc(t.emoji || '🎬')}</span>`;
       $view.innerHTML = `
         ${backHtml()}
@@ -184,9 +184,6 @@ function openTemplate(id) {
           ${fieldHtml({ name: 'image', type: 'file', accept: 'image/*', label: 'Ваше фото' })}
           <button class="cta" type="submit">Создать видео · ${t.cost} ₽</button>
         </form>`;
-      const vid = $view.querySelector('.preview-big video');
-      const sb = $view.querySelector('#soundBtn');
-      if (vid && sb) sb.onclick = () => { vid.muted = !vid.muted; vid.currentTime = vid.muted ? vid.currentTime : 0; vid.play().catch(() => {}); sb.textContent = vid.muted ? '🔊 Смотреть со звуком' : '🔇 Без звука'; };
       bindCommon();
       bindForm({ tool: 'template', template_id: t.id }, [{ name: 'image', type: 'file' }]);
     },
