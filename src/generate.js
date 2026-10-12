@@ -1,3 +1,4 @@
+import https from 'node:https';
 import { config, mockMode, provider, polzaModels, tools, resolveTool } from './config.js';
 import { createJob, updateJob, getJob, pendingJobs, addBalance, chargeBalance } from './db.js';
 
@@ -27,6 +28,33 @@ async function polzaFetch(url, opts = {}) {
   if (!res.ok) throw new Error(`polza HTTP ${res.status}: ${JSON.stringify(body?.error || body?.message || body).slice(0, 300)}`);
   return body;
 }
+
+// POST к Polza держит соединение, пока результат не готов (у видео — минуты), поэтому без 5-минутного
+// таймаута встроенного fetch: ждём до 20 минут.
+function polzaSubmit(body) {
+  return new Promise((resolve, reject) => {
+    const req = https.request(POLZA_MEDIA, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${config.polzaKey}`, 'Content-Type': 'application/json' },
+    }, (res) => {
+      let data = '';
+      res.setEncoding('utf8');
+      res.on('data', (c) => { data += c; });
+      res.on('end', () => {
+        let b;
+        try { b = JSON.parse(data); } catch { b = { raw: data }; }
+        if (res.statusCode >= 400) reject(new Error(`polza HTTP ${res.statusCode}: ${JSON.stringify(b?.error?.message || b?.error || b).slice(0, 300)}`));
+        else resolve(b);
+      });
+    });
+    req.on('error', reject);
+    req.setTimeout(20 * 60 * 1000, () => req.destroy(new Error('polza: превышено время ожидания результата')));
+    req.end(JSON.stringify(body));
+  });
+}
+
+const POLZA_DONE = /^(completed|succeeded|success|done|finished)$/;
+const POLZA_FAILED = /^(failed|error|cancel+ed|rejected|expired)$/;
 
 // То же, что buildRequest, но для Polza.ai: POST /api/v1/media { model, input }
 export function buildPolzaRequest(tool, p, template) {
@@ -186,14 +214,17 @@ export async function startJob({ userId, tool, params, template }) {
   }
 
   if (provider === 'polza') {
-    try {
-      const sub = await polzaFetch(POLZA_MEDIA, { method: 'POST', body: JSON.stringify({ model, input }) });
+    // Клиенту отвечаем сразу, а результат ждём в фоне; если Polza вернула задачу в очереди — её добирает поллер
+    updateJob(jobId, { request_id: 'polza-submit' });
+    polzaSubmit({ model, input }).then((sub) => {
+      const status = String(sub.status || '').toLowerCase();
+      if (POLZA_FAILED.test(status)) return fail(jobId, sub.error?.message || sub.error || `polza: ${status}`);
+      const url = POLZA_DONE.test(status) ? findResultUrl(sub) : null;
+      if (url) return finish(jobId, url);
       const id = sub.id || sub.data?.id;
-      if (!id) throw new Error(`polza: нет id задачи в ответе ${JSON.stringify(sub).slice(0, 200)}`);
+      if (!id) throw new Error(`polza: нет результата и id задачи: ${JSON.stringify(sub).slice(0, 200)}`);
       updateJob(jobId, { request_id: String(id), status_url: `${POLZA_MEDIA}/${id}`, response_url: `${POLZA_MEDIA}/${id}` });
-    } catch (e) {
-      fail(jobId, e.message);
-    }
+    }).catch((e) => fail(jobId, e.message));
     return jobId;
   }
 
@@ -228,14 +259,19 @@ const MAX_AGE = 30 * 60 * 1000;
 async function pollOnce() {
   for (const job of pendingJobs()) {
     if (job.request_id === 'mock') continue;
+    if (job.request_id === 'polza-submit') {
+      // отправка ещё идёт в фоне; если бот перезапускали посреди неё — вернуть монеты по таймауту
+      if (Date.now() - job.created_at > MAX_AGE) fail(job.id, 'Превышено время ожидания');
+      continue;
+    }
     if (job.status_url?.startsWith(POLZA_MEDIA)) {
       try {
         const st = await polzaFetch(job.status_url);
         const status = String(st.status || st.data?.status || '').toLowerCase();
-        if (/^(completed|succeeded|success|done|finished)$/.test(status)) {
+        if (POLZA_DONE.test(status)) {
           const url = findResultUrl(st);
           url ? finish(job.id, url) : fail(job.id, 'Модель не вернула результат');
-        } else if (/^(failed|error|cancel+ed|rejected|expired)$/.test(status)) {
+        } else if (POLZA_FAILED.test(status)) {
           fail(job.id, st.error?.message || st.error || st.message || `polza: ${status}`);
         } else if (Date.now() - job.created_at > MAX_AGE) {
           fail(job.id, 'Превышено время ожидания');
