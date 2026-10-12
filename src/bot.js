@@ -7,7 +7,27 @@ import { upsertUser, getUser, recordPayment, addBalance, stats } from './db.js';
 
 export const bot = config.botToken ? new Bot(config.botToken) : null;
 
-const appButton = () => new InlineKeyboard().webApp('🎬 Открыть приложение', config.publicUrl);
+// Шаблон для витрины в приветствии: первый с видео-превью (новинка сверху списка)
+const featuredTemplate = () => loadTemplates().find((t) => t.preview && !/\.(png|jpe?g|webp|svg|gif)(\?|$)/i.test(t.preview));
+
+// Клиенту — одна кнопка: всё остальное внутри приложения
+const welcomeKeyboard = () => new InlineKeyboard().webApp('🎬 Открыть', config.publicUrl);
+
+// Приветствие с роликом-витриной; file_id кешируем, чтобы не загружать видео в Telegram каждый раз
+let welcomeVideo = { url: null, fileId: null };
+async function sendWelcome(ctx, caption) {
+  const t = featuredTemplate();
+  if (t) {
+    try {
+      const src = welcomeVideo.url === t.preview && welcomeVideo.fileId ? welcomeVideo.fileId : new InputFile(new URL(t.preview));
+      const msg = await ctx.replyWithVideo(src, { caption, reply_markup: welcomeKeyboard(), supports_streaming: true });
+      welcomeVideo = { url: t.preview, fileId: msg.video?.file_id || null };
+      return;
+    } catch (e) { console.error('welcome video', e.message); }
+  }
+  await ctx.reply(caption, { reply_markup: welcomeKeyboard() });
+}
+
 const isAdmin = (ctx) => config.adminIds.includes(String(ctx.from?.id));
 const rubFmt = (n) => `${Math.round(n).toLocaleString('ru-RU')} ₽`;
 const who = (u) => `${u.first_name || ''} ${u.username ? '@' + u.username : ''} (${u.id})`.trim();
@@ -23,7 +43,7 @@ export function notifyAdmins(text) {
 // Зачисление после оплаты (Stars или ЮKassa): сообщения клиенту, пригласившему и админам
 export async function announcePayment({ userId, credits, referrerId, bonus, label }) {
   if (!bot) return;
-  await bot.api.sendMessage(userId, `✅ Оплата прошла! Зачислено ${credits} ₽. Баланс: ${getUser(userId).balance} ₽`, { reply_markup: appButton() }).catch(() => {});
+  await bot.api.sendMessage(userId, `✅ Оплата прошла! Зачислено ${credits} ₽. Баланс: ${getUser(userId).balance} ₽`, { reply_markup: welcomeKeyboard() }).catch(() => {});
   if (bonus > 0) bot.api.sendMessage(referrerId, `🎁 Ваш друг пополнил баланс — вам начислено ${bonus} ₽ на баланс!`).catch(() => {});
   notifyAdmins(`💸 Оплата ${label} от ${who(getUser(userId))}`);
 }
@@ -55,33 +75,22 @@ if (bot) {
   bot.command('start', async (ctx) => {
     const isNew = !getUser(ctx.from.id);
     const u = upsertUser(ctx.from, config.startBonus, parseRef(ctx.match));
+    if (isNew) notifyAdmins(`👤 Новый пользователь: ${who(ctx.from)}${u.referrer_id ? ` (пришёл по приглашению ${u.referrer_id})` : ''}`);
     if (isNew && u.referrer_id) {
       bot.api.sendMessage(u.referrer_id, `🎉 По вашей ссылке пришёл новый пользователь! Вы будете получать ${config.refPercent}% от каждой его покупки.`).catch(() => {});
     }
-    await ctx.reply(
-      `Привет, ${ctx.from.first_name || 'друг'}! 👋\n\n`
-      + '🎬 Видео по трендовым шаблонам — просто добавь своё фото\n'
-      + '✍️ Видео по описанию — напиши, что снять\n'
-      + '📸 Оживление фото, картинки, примерочная, озвучка\n\n'
-      + `🎁 Тебе подарено ${config.startBonus} ₽ на баланс. Баланс: ${u.balance} ₽\n\nЖми кнопку ниже 👇`,
-      { reply_markup: appButton() },
-    );
-    if (isAdmin(ctx)) await ctx.reply(ADMIN_HELP);
-  });
-
-  bot.command('balance', async (ctx) => {
-    const u = upsertUser(ctx.from, config.startBonus);
-    await ctx.reply(`💰 Баланс: ${u.balance} ₽`, { reply_markup: appButton() });
-  });
-
-  bot.command('invite', async (ctx) => {
-    upsertUser(ctx.from, config.startBonus);
-    await ctx.reply(`Приглашайте друзей и получайте ${config.refPercent}% от каждой их покупки 🎁\n\nВаша ссылка:\n${refLink(ctx.from.id)}`);
-  });
-
-  bot.command('help', async (ctx) => {
-    const support = config.supportUsername ? `\n\nПоддержка: @${config.supportUsername}` : '';
-    await ctx.reply(`Откройте приложение кнопкой ниже, выберите шаблон или инструмент и загрузите фото. Готовый результат придёт сюда в чат.${support}`, { reply_markup: appButton() });
+    const name = ctx.from.first_name || 'друг';
+    if (!isNew) {
+      await ctx.reply(`С возвращением, ${name}! 👋\n💰 На балансе: ${u.balance} ₽`, { reply_markup: welcomeKeyboard() });
+    } else {
+      const caption = `Привет, ${name}! 👋 Это KVQ AI — ролики с вашим лицом за пару минут.\n\n`
+        + '🔥 Трендовые шаблоны — добавьте фото, нейросеть снимет вас в сюжете\n'
+        + '✍️ Видео по описанию — напишите, что снять\n'
+        + '📸 Оживление фото, картинки, примерочная, озвучка\n\n'
+        + (config.startBonus > 0 ? `🎁 Дарим ${config.startBonus} ₽ на баланс для старта.\n\n` : '')
+        + 'Жмите «Открыть» 👇';
+      await sendWelcome(ctx, caption);
+    }
     if (isAdmin(ctx)) await ctx.reply(ADMIN_HELP);
   });
 
@@ -145,7 +154,7 @@ if (bot) {
     await ctx.reply(`Отправляю ${ids.length} пользователям…`);
     let ok = 0;
     for (const id of ids) {
-      try { await bot.api.sendMessage(id, text, { reply_markup: appButton() }); ok++; } catch { /* пользователь заблокировал бота */ }
+      try { await bot.api.sendMessage(id, text, { reply_markup: welcomeKeyboard() }); ok++; } catch { /* пользователь заблокировал бота */ }
       await new Promise((r) => setTimeout(r, 40)); // лимит Telegram ~30 сообщений/сек
     }
     await ctx.reply(`Готово: доставлено ${ok} из ${ids.length}`);
@@ -242,6 +251,13 @@ if (bot) {
     if (r) await announcePayment({ userId: ctx.from.id, credits: pkg.credits, ...r, label: `${p.total_amount} ⭐` });
   });
 
+  // Любое другое сообщение клиента: всё делается в приложении — подсказываем, куда нажать
+  bot.on('message', async (ctx) => {
+    if (ctx.chat.type !== 'private') return;
+    upsertUser(ctx.from, config.startBonus);
+    await ctx.reply('Я создаю ролики в приложении 👇 Откройте его, выберите шаблон или инструмент и загрузите фото — готовый результат пришлю сюда.', { reply_markup: welcomeKeyboard() });
+  });
+
   bot.catch((err) => console.error('bot error', err.error));
 }
 
@@ -258,9 +274,9 @@ export async function createStarsInvoice(userId, pkgId) {
 // Отправляет результат генерации в чат с ботом
 export async function notifyJob(job) {
   if (!bot) return;
-  const kb = appButton();
+  const kb = welcomeKeyboard();
   if (job.status === 'failed') {
-    await bot.api.sendMessage(job.user_id, `❌ «${job.title}» — не получилось. Монеты (${job.cost}) возвращены.`, { reply_markup: kb });
+    await bot.api.sendMessage(job.user_id, `❌ «${job.title}» — не получилось. Деньги (${job.cost} ₽) вернули на баланс.`, { reply_markup: kb });
     return;
   }
   const caption = `✅ «${job.title}» готово!`;

@@ -88,6 +88,10 @@ app.post('/api/generate', fileFields, async (req, res) => {
   const { tool, template_id, prompt, voice, variant, aspect } = req.body;
   const f = req.files || {};
   const url = (k) => (f[k]?.[0] ? `${config.publicUrl}/uploads/${f[k][0].filename}` : undefined);
+  // заказ не принят (нет денег, не хватает фото и т.п.) — загруженные файлы не нужны, не копим их на диске
+  res.on('finish', () => {
+    if (res.statusCode >= 400) for (const x of Object.values(f).flat()) fs.rm(x.path, { force: true }, () => {});
+  });
   const params = {
     prompt: (prompt || '').trim().slice(0, 2000), voice, variant,
     aspect: ['9:16', '16:9', '1:1'].includes(aspect) ? aspect : '9:16',
@@ -138,12 +142,16 @@ startYookassaPoller();
 if (bot) {
   await bot.api.setChatMenuButton({ menu_button: { type: 'web_app', text: 'Открыть', web_app: { url: config.publicUrl } } })
     .catch((e) => console.warn('Не удалось поставить кнопку меню (нужен HTTPS PUBLIC_URL):', e.message));
-  await bot.api.setMyCommands([
-    { command: 'start', description: 'Открыть приложение' },
-    { command: 'balance', description: 'Мой баланс' },
-    { command: 'invite', description: 'Пригласить друга и получать бонусы' },
-    { command: 'help', description: 'Помощь' },
-  ]).catch(() => {});
+  // Без меню команд: у клиента только кнопка «Открыть»
+  await bot.api.deleteMyCommands().catch(() => {});
+  // Тексты профиля: «Что умеет этот бот?» в пустом чате и короткое описание в карточке бота
+  await bot.api.setMyDescription({
+    description: '🎬 KVQ AI — ролики с вашим лицом за пару минут.\n\n'
+      + '🔥 Трендовые шаблоны: выберите сюжет, добавьте фото — нейросеть снимет вас в главной роли.\n'
+      + '✍️ Видео по описанию, оживление фото, картинки, примерочная, озвучка.\n\n'
+      + 'Оплата в рублях, результат приходит прямо в чат. Жмите «Запустить» 👇',
+  }).catch(() => {});
+  await bot.api.setMyShortDescription({ short_description: 'Ролики с вашим лицом по трендовым шаблонам. Фото → видео за пару минут.' }).catch(() => {});
   bot.start({ onStart: (me) => console.log(`Бот @${me.username} запущен`) });
 } else {
   console.log('BOT_TOKEN не задан — бот не запущен, работает только веб-часть.');

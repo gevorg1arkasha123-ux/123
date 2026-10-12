@@ -235,7 +235,7 @@ export async function startJob({ userId, tool, params, template }) {
   const { model, input } = provider === 'polza' ? buildPolzaRequest(tool, params, template) : buildRequest(tool, params, template);
 
   if (!chargeBalance(userId, cost)) {
-    const err = new Error('Недостаточно монет');
+    const err = new Error('Недостаточно средств на балансе');
     err.code = 'NO_BALANCE';
     throw err;
   }
