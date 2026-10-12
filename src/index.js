@@ -61,7 +61,7 @@ app.get('/api/me', (req, res) => {
 });
 
 // Клиенту не отдаём промпты и себестоимость
-app.get('/api/templates', (_req, res) => res.json(loadTemplates().map(({ prompt, falUsd, model, video, ...t }) => t)));
+app.get('/api/templates', (_req, res) => res.json(loadTemplates().map(({ prompt, falUsd, model, video, refVideo, ...t }) => t)));
 
 app.get('/api/history', (req, res) => res.json({ jobs: userJobs(req.user.id), balance: getUser(req.user.id).balance }));
 

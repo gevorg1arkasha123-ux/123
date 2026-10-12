@@ -184,6 +184,15 @@ export function addTemplate(tpl) {
   saveTemplates(list);
 }
 
+export function updateTemplate(id, patch) {
+  const list = readTemplatesRaw();
+  const t = list.find((x) => x.id === id);
+  if (!t) return false;
+  Object.assign(t, patch);
+  saveTemplates(list);
+  return true;
+}
+
 export function deleteTemplate(id) {
   const list = readTemplatesRaw();
   const next = list.filter((t) => t.id !== id);

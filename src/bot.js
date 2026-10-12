@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { Bot, InlineKeyboard, InputFile } from 'grammy';
-import { config, packages, tools, loadTemplates, addTemplate, deleteTemplate } from './config.js';
+import { config, packages, tools, loadTemplates, addTemplate, deleteTemplate, updateTemplate } from './config.js';
 import { upsertUser, getUser, recordPayment, addBalance, stats } from './db.js';
 
 export const bot = config.botToken ? new Bot(config.botToken) : null;
@@ -156,8 +156,8 @@ if (bot) {
     const list = loadTemplates();
     if (!list.length) return ctx.reply('Шаблонов нет. Отправьте видео с подписью, чтобы добавить.');
     for (const t of list.slice(0, 50)) {
-      await ctx.reply(`${t.type === 'scene' ? '👥' : t.type === 'motion' ? '🎬' : '📸'} ${t.title} · ${t.category || '—'} · ${t.cost} ₽\nid: ${t.id}`, {
-        reply_markup: new InlineKeyboard().text('🗑 Удалить', `del:${t.id}`),
+      await ctx.reply(`${t.type === 'scene' ? '👥' : t.type === 'motion' ? '🎬' : '📸'} ${t.title} · ${t.category || '—'} · ${t.cost} ₽\nid: ${t.id}${t.description ? `\n\n${t.description}` : ''}`, {
+        reply_markup: new InlineKeyboard().text('✏️ Описание', `desc:${t.id}`).text('🗑 Удалить', `del:${t.id}`),
       });
     }
   });
@@ -167,6 +167,24 @@ if (bot) {
     const ok = deleteTemplate(ctx.match[1]);
     await ctx.answerCallbackQuery(ok ? 'Удалено' : 'Уже удалён');
     await ctx.editMessageText(`${ctx.callbackQuery.message.text}\n\n🗑 Удалён`).catch(() => {});
+  });
+
+  // Описание шаблона для экрана в приложении: кнопка в /templates → следующее сообщение админа
+  const pendingDesc = new Map(); // adminId → id шаблона
+  bot.callbackQuery(/^desc:(.+)$/, async (ctx) => {
+    if (!isAdmin(ctx)) return ctx.answerCallbackQuery();
+    pendingDesc.set(ctx.from.id, ctx.match[1]);
+    await ctx.answerCallbackQuery();
+    await ctx.reply('✏️ Пришли описание шаблона одним сообщением. «-» — убрать описание, /cancel — отмена.');
+  });
+  bot.on('message:text', async (ctx, next) => {
+    const id = pendingDesc.get(ctx.from?.id);
+    if (!id || !isAdmin(ctx)) return next();
+    pendingDesc.delete(ctx.from.id);
+    if (ctx.message.text.startsWith('/')) return ctx.reply('Ок, описание не меняю.');
+    const text = ctx.message.text.trim();
+    const ok = updateTemplate(id, { description: text === '-' ? '' : text.slice(0, 600) });
+    return ctx.reply(ok ? '✅ Описание сохранено — уже видно в приложении.' : 'Шаблон не найден.');
   });
 
   // Админ присылает видео → новый шаблон-тренд. Подпись (необязательно): «Название» или «Название | Категория | Подсказка».
