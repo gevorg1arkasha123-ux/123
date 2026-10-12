@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import { execFile } from 'node:child_process';
 import { Bot, InlineKeyboard, InputFile } from 'grammy';
 import { config, packages, tools, loadTemplates, addTemplate, deleteTemplate, updateTemplate } from './config.js';
 import { upsertUser, getUser, recordPayment, addBalance, stats } from './db.js';
@@ -46,6 +47,15 @@ export async function announcePayment({ userId, credits, referrerId, bonus, labe
   await bot.api.sendMessage(userId, `✅ Оплата прошла! Зачислено ${credits} ₽. Баланс: ${getUser(userId).balance} ₽`, { reply_markup: welcomeKeyboard() }).catch(() => {});
   if (bonus > 0) bot.api.sendMessage(referrerId, `🎁 Ваш друг пополнил баланс — вам начислено ${bonus} ₽ на баланс!`).catch(() => {});
   notifyAdmins(`💸 Оплата ${label} от ${who(getUser(userId))}`);
+}
+
+// Лёгкая копия видео для карточек в приложении (360p, 8 сек, без звука), чтобы главная быстро грузилась с телефона
+async function makeThumb(url) {
+  const src = path.join(config.uploadsDir, path.basename(url));
+  const name = `${path.basename(src, '.mp4')}-card.mp4`;
+  return new Promise((resolve) => execFile('ffmpeg', ['-y', '-v', 'error', '-i', src, '-t', '8', '-an', '-vf', 'scale=360:-2:flags=lanczos,fps=24',
+    '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '28', '-movflags', '+faststart', path.join(config.uploadsDir, name)],
+  { timeout: 120000 }, (e) => resolve(e ? null : `${config.publicUrl}/uploads/${name}`)));
 }
 
 // Скачивает файл, присланный боту, в папку uploads и возвращает публичную ссылку
@@ -230,7 +240,8 @@ if (bot) {
     try {
       const url = await saveTelegramFile(fileId, '.mp4');
       const id = `t${Date.now().toString(36)}`;
-      addTemplate({ id, title, category: category || 'Тренды', hint: hint || 'Фото в полный рост, хорошо видно лицо', video: url, preview: url });
+      const thumb = await makeThumb(url);
+      addTemplate({ id, title, category: category || 'Тренды', hint: hint || 'Фото в полный рост, хорошо видно лицо', video: url, preview: url, ...(thumb && { thumb }) });
       await bot.api.editMessageText(ctx.chat.id, msg.message_id, `✅ Шаблон «${title}» добавлен и уже виден в приложении.\nid: ${id}`, {
         reply_markup: new InlineKeyboard().text('🗑 Удалить', `del:${id}`),
       });

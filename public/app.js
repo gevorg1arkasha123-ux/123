@@ -158,9 +158,12 @@ const artHtml = (t, cls = 'art') => {
   const [a, b] = artBg(t.id);
   return `<div class="${cls}" style="background:radial-gradient(120% 90% at 20% 10%,${a},${b})">${t.faces?.length ? icons.people : icons.film}</div>`;
 };
-const mediaHtml = (t) => (t.preview
-  ? (isImg(t.preview) ? `<img src="${esc(t.preview)}" alt="" loading="lazy">` : `<video src="${esc(t.preview)}#t=0.1" data-auto muted loop playsinline preload="metadata"></video>`)
-  : artHtml(t));
+// В карточках — лёгкая копия ролика (thumb), полное качество — на экране шаблона
+const mediaHtml = (t) => {
+  const src = t.thumb || t.preview;
+  if (!src) return artHtml(t);
+  return isImg(src) ? `<img src="${esc(src)}" alt="" loading="lazy">` : `<video src="${esc(src)}#t=0.1" data-auto muted loop playsinline preload="metadata"></video>`;
+};
 
 /* ---------- Шаблоны ---------- */
 function cardHtml(t) {
