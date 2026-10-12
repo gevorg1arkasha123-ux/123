@@ -54,10 +54,10 @@ const starsFor = (rub) => Math.ceil(rub / (config.starUsd * config.usdRub));
 // Пакеты пополнения. rub — цена в рублях (ЮKassa), credits — сколько монет получит клиент.
 // Бонусные монеты в крупных пакетах немного снижают маржу.
 export const packages = [
-  { id: 'p199', rub: 199, credits: 200, title: '200 монет' },
-  { id: 'p490', rub: 490, credits: 550, title: '550 монет', badge: '+10%' },
-  { id: 'p990', rub: 990, credits: 1200, title: '1200 монет', badge: 'Хит' },
-  { id: 'p2490', rub: 2490, credits: 3200, title: '3200 монет', badge: '+28%' },
+  { id: 'p199', rub: 199, credits: 200, title: '200 ₽ на баланс' },
+  { id: 'p490', rub: 490, credits: 550, title: '550 ₽ на баланс', badge: '+10%' },
+  { id: 'p990', rub: 990, credits: 1200, title: '1200 ₽ на баланс', badge: 'Хит' },
+  { id: 'p2490', rub: 2490, credits: 3200, title: '3200 ₽ на баланс', badge: '+28%' },
 ].map((p) => ({ ...p, stars: starsFor(p.rub) }));
 
 // Два уровня качества для видео по описанию и «оживления» фото. Клиент видит только «Стандарт» и «Премиум».

@@ -23,8 +23,8 @@ export function notifyAdmins(text) {
 // Зачисление после оплаты (Stars или ЮKassa): сообщения клиенту, пригласившему и админам
 export async function announcePayment({ userId, credits, referrerId, bonus, label }) {
   if (!bot) return;
-  await bot.api.sendMessage(userId, `✅ Оплата прошла! Зачислено ${credits} монет. Баланс: ${getUser(userId).balance}`, { reply_markup: appButton() }).catch(() => {});
-  if (bonus > 0) bot.api.sendMessage(referrerId, `🎁 Ваш друг пополнил баланс — вам начислено ${bonus} монет!`).catch(() => {});
+  await bot.api.sendMessage(userId, `✅ Оплата прошла! Зачислено ${credits} ₽. Баланс: ${getUser(userId).balance} ₽`, { reply_markup: appButton() }).catch(() => {});
+  if (bonus > 0) bot.api.sendMessage(referrerId, `🎁 Ваш друг пополнил баланс — вам начислено ${bonus} ₽ на баланс!`).catch(() => {});
   notifyAdmins(`💸 Оплата ${label} от ${who(getUser(userId))}`);
 }
 
@@ -56,14 +56,14 @@ if (bot) {
     const isNew = !getUser(ctx.from.id);
     const u = upsertUser(ctx.from, config.startBonus, parseRef(ctx.match));
     if (isNew && u.referrer_id) {
-      bot.api.sendMessage(u.referrer_id, `🎉 По вашей ссылке пришёл новый пользователь! Вы будете получать ${config.refPercent}% монет с каждой его покупки.`).catch(() => {});
+      bot.api.sendMessage(u.referrer_id, `🎉 По вашей ссылке пришёл новый пользователь! Вы будете получать ${config.refPercent}% от каждой его покупки.`).catch(() => {});
     }
     await ctx.reply(
       `Привет, ${ctx.from.first_name || 'друг'}! 👋\n\n`
       + '🎬 Видео по трендовым шаблонам — просто добавь своё фото\n'
       + '✍️ Видео по описанию — напиши, что снять\n'
       + '📸 Оживление фото, картинки, примерочная, озвучка\n\n'
-      + `🎁 Тебе подарено ${config.startBonus} монет. Баланс: ${u.balance}\n\nЖми кнопку ниже 👇`,
+      + `🎁 Тебе подарено ${config.startBonus} ₽ на баланс. Баланс: ${u.balance} ₽\n\nЖми кнопку ниже 👇`,
       { reply_markup: appButton() },
     );
     if (isAdmin(ctx)) await ctx.reply(ADMIN_HELP);
@@ -71,12 +71,12 @@ if (bot) {
 
   bot.command('balance', async (ctx) => {
     const u = upsertUser(ctx.from, config.startBonus);
-    await ctx.reply(`💰 Баланс: ${u.balance} монет`, { reply_markup: appButton() });
+    await ctx.reply(`💰 Баланс: ${u.balance} ₽`, { reply_markup: appButton() });
   });
 
   bot.command('invite', async (ctx) => {
     upsertUser(ctx.from, config.startBonus);
-    await ctx.reply(`Приглашайте друзей и получайте ${config.refPercent}% монет с каждой их покупки 🎁\n\nВаша ссылка:\n${refLink(ctx.from.id)}`);
+    await ctx.reply(`Приглашайте друзей и получайте ${config.refPercent}% от каждой их покупки 🎁\n\nВаша ссылка:\n${refLink(ctx.from.id)}`);
   });
 
   bot.command('help', async (ctx) => {
@@ -232,7 +232,7 @@ export async function createStarsInvoice(userId, pkgId) {
   if (!pkg || !bot) throw new Error('Пакет не найден');
   // Валюта XTR = Telegram Stars, provider_token для неё пустой
   return bot.api.createInvoiceLink(
-    pkg.title, `Пополнение баланса на ${pkg.credits} монет`, `pkg:${pkg.id}:${userId}`,
+    pkg.title, `Пополнение баланса на ${pkg.credits} ₽`, `pkg:${pkg.id}:${userId}`,
     '', 'XTR', [{ label: pkg.title, amount: pkg.stars }],
   );
 }

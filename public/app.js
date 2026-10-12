@@ -124,7 +124,7 @@ function render() {
   ({ home: renderHome, topup: renderTopup, create: renderCreate, history: renderHistory, profile: renderProfile })[state.tab]();
 }
 
-const balanceHtml = () => `<div class="topbar"><button class="balance" data-go="topup"><span class="coin">🪙</span>${state.me?.user.balance ?? '…'}<span class="plus">+</span></button></div>`;
+const balanceHtml = () => `<div class="topbar"><button class="balance" data-go="topup">${state.me?.user.balance ?? '…'}<span class="coin">&nbsp;₽</span><span class="plus">+</span></button></div>`;
 const demoHtml = () => (state.me?.mock ? '<div class="demo-note">Демо-режим: ключ FAL_KEY не задан, генерация имитируется.</div>' : '');
 const backHtml = () => `<button class="back" data-back>${icons.back}Назад</button>`;
 
@@ -136,7 +136,7 @@ function bindCommon() {
 /* ---------- Главная ---------- */
 function tplCard(t) {
   const media = t.preview
-    ? (isImg(t.preview) ? `<img src="${esc(t.preview)}" alt="">` : `<video src="${esc(t.preview)}" autoplay muted loop playsinline></video>`)
+    ? (isImg(t.preview) ? `<img src="${esc(t.preview)}" alt="">` : `<video src="${esc(t.preview)}#t=0.1" autoplay muted loop playsinline preload="metadata"></video>`)
     : `<div class="media" style="background:linear-gradient(135deg,${esc(t.gradient?.[0] || '#7b2ff7')},${esc(t.gradient?.[1] || '#f107a3')})">${esc(t.emoji || '🎬')}</div>`;
   return `<button class="tpl" data-tpl="${esc(t.id)}">${media}<span class="badge">${icons.video}</span><span class="name">${esc(t.title)}</span></button>`;
 }
@@ -173,7 +173,7 @@ function openTemplate(id) {
   push({
     render() {
       const media = t.preview
-        ? (isImg(t.preview) ? `<img src="${esc(t.preview)}">` : `<video src="${esc(t.preview)}" autoplay muted loop playsinline></video>`)
+        ? (isImg(t.preview) ? `<img src="${esc(t.preview)}">` : `<video src="${esc(t.preview)}#t=0.1" autoplay muted loop playsinline controls preload="metadata"></video><button type="button" class="sound-btn" id="soundBtn">🔊 Смотреть со звуком</button>`)
         : `<span>${esc(t.emoji || '🎬')}</span>`;
       $view.innerHTML = `
         ${backHtml()}
@@ -182,8 +182,11 @@ function openTemplate(id) {
         <p class="hint" style="margin-top:6px">${esc(t.hint || 'Загрузите фото')}</p>
         <form id="f">
           ${fieldHtml({ name: 'image', type: 'file', accept: 'image/*', label: 'Ваше фото' })}
-          <button class="cta" type="submit">Создать видео · ${t.cost} 🪙</button>
+          <button class="cta" type="submit">Создать видео · ${t.cost} ₽</button>
         </form>`;
+      const vid = $view.querySelector('.preview-big video');
+      const sb = $view.querySelector('#soundBtn');
+      if (vid && sb) sb.onclick = () => { vid.muted = !vid.muted; vid.currentTime = vid.muted ? vid.currentTime : 0; vid.play().catch(() => {}); sb.textContent = vid.muted ? '🔊 Смотреть со звуком' : '🔇 Без звука'; };
       bindCommon();
       bindForm({ tool: 'template', template_id: t.id }, [{ name: 'image', type: 'file' }]);
     },
@@ -201,12 +204,12 @@ function renderCreate() {
     <div class="section-label">Все инструменты</div>
     <button class="feature" data-tool="t2v">
       <span class="txt"><span class="new">СО ЗВУКОМ</span><h3>Видео по описанию</h3><p>Опишите сцену словами — получите ролик со звуком.</p>
-      <span class="pill"><span class="pill-tag">от ${state.me?.tools.t2v.cost ?? ''} 🪙</span><span class="round">${icons.arrow}</span></span></span>
+      <span class="pill"><span class="pill-tag">от ${state.me?.tools.t2v.cost ?? ''} ₽</span><span class="round">${icons.arrow}</span></span></span>
       <span class="art" style="background:linear-gradient(160deg,#00c6ff,#7b2ff7 60%,#f107a3)">🎥</span>
     </button>
     <button class="feature" data-tool="motion" style="margin-top:12px">
       <span class="txt"><span class="new">НОВОЕ</span><h3>Повторить видео</h3><p>Перенесите движение или замените героя, предмет и фон.</p>
-      <span class="pill"><span class="pill-tag">${state.me?.tools.motion.cost ?? ''} 🪙</span><span class="round">${icons.arrow}</span></span></span>
+      <span class="pill"><span class="pill-tag">${state.me?.tools.motion.cost ?? ''} ₽</span><span class="round">${icons.arrow}</span></span></span>
       <span class="art">🐱</span>
     </button>
     <div class="tools">
@@ -226,7 +229,7 @@ function fieldHtml(f, toolKey) {
     const vs = Object.entries(state.me.tools[toolKey].variants);
     return `<div class="field"><label>Качество</label><div class="variants">${vs.map(([k, v], i) => `
       <label class="variant"><input type="radio" name="variant" value="${k}" ${i ? '' : 'checked'}>
-      <span><b>${esc(v.title)}</b><small>${esc(v.desc)}</small><em>${v.cost} 🪙</em></span></label>`).join('')}</div></div>`;
+      <span><b>${esc(v.title)}</b><small>${esc(v.desc)}</small><em>${v.cost} ₽</em></span></label>`).join('')}</div></div>`;
   }
   if (f.type === 'file') {
     return `<div class="field"><label>${esc(f.label)}</label><div class="drop" data-drop="${f.name}"><span>Нажмите, чтобы загрузить</span><input type="file" name="${f.name}" accept="${f.accept}"></div></div>`;
@@ -248,7 +251,7 @@ function openTool(key) {
         <p class="sub">${esc(form.desc)}</p>
         <form id="f">
           ${form.fields.map((fl) => fieldHtml(fl, key)).join('')}
-          <button class="cta" type="submit">Создать · <span id="price">${state.me.tools[key].cost}</span> 🪙</button>
+          <button class="cta" type="submit">Создать · <span id="price">${state.me.tools[key].cost}</span> ₽</button>
         </form>`;
       bindCommon();
       bindForm({ tool: key }, form.fields.filter((fl) => fl.type !== 'variant'));
@@ -296,7 +299,7 @@ function bindForm(extra, fields) {
       setTab('history');
     } catch (err) {
       tg?.HapticFeedback?.notificationOccurred?.('error');
-      if (err.code === 'NO_BALANCE') { toast('Недостаточно монет — пополните баланс'); setTab('topup'); return; }
+      if (err.code === 'NO_BALANCE') { toast('Недостаточно средств — пополните баланс'); setTab('topup'); return; }
       toast(err.message);
       btn.disabled = false;
       btn.textContent = 'Попробовать ещё раз';
@@ -314,8 +317,8 @@ function renderTopup() {
     ${state.me.packages.map((p) => `
       <div class="pkg">
         <div class="pkg-head">
-          <span style="font-size:30px">🪙</span>
-          <span><span class="big">${p.credits}</span> монет${p.badge ? `<span class="tag">${esc(p.badge)}</span>` : ''}</span>
+          <span style="font-size:30px">💰</span>
+          <span><span class="big">${p.credits} ₽</span> на баланс${p.badge ? `<span class="tag">${esc(p.badge)}</span>` : ''}</span>
         </div>
         <div class="pkg-actions">
           ${pay.card ? `<button class="pay-card" data-card="${p.id}">💳 ${p.rub} ₽</button>` : ''}
@@ -323,7 +326,7 @@ function renderTopup() {
         </div>
       </div>`).join('')}
     <div class="section-label">Цены</div>
-    ${Object.values(state.me.tools).map((t) => `<div class="list-item"><span>${esc(t.title)}</span><span>${t.variants ? 'от ' : ''}${t.cost} 🪙</span></div>`).join('')}`;
+    ${Object.values(state.me.tools).map((t) => `<div class="list-item"><span>${esc(t.title)}</span><span>${t.variants ? 'от ' : ''}${t.cost} ₽</span></div>`).join('')}`;
   bindCommon();
   const post = (url, pkg) => api(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ package: pkg }) });
 
@@ -333,7 +336,7 @@ function renderTopup() {
     try {
       const { link } = await post('/api/pay/card', b.dataset.card);
       tg?.openLink ? tg.openLink(link) : window.open(link, '_blank');
-      toast('После оплаты монеты зачислятся автоматически');
+      toast('После оплаты деньги зачислятся на баланс автоматически');
       waitForBalance();
     } catch (e) { toast(e.message); }
     b.disabled = false;
@@ -379,14 +382,14 @@ async function renderHistory() {
   try { data = await api('/api/history'); } catch (e) { $view.innerHTML = `<h1>История</h1><div class="empty">${esc(e.message)}</div>`; return; }
   if (state.tab !== 'history' || state.stack.length) return;
   state.me.user.balance = data.balance;
-  const labels = { queued: 'Генерируется…', done: 'Готово', failed: 'Ошибка, монеты возвращены' };
+  const labels = { queued: 'Генерируется…', done: 'Готово', failed: 'Ошибка, деньги возвращены' };
   $view.innerHTML = `
     <h1>История</h1>
     <p class="sub">Ваши генерации</p>
     ${data.jobs.length ? data.jobs.map((j) => `
       <div class="job" data-job="${j.id}">
         <div class="thumb">${jobThumb(j)}</div>
-        <div><b>${esc(j.title)}</b><small>${new Date(j.created_at).toLocaleString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })} · ${j.cost} 🪙</small>
+        <div><b>${esc(j.title)}</b><small>${new Date(j.created_at).toLocaleString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })} · ${j.cost} ₽</small>
         <div class="status ${j.status}">${labels[j.status]}</div></div>
       </div>`).join('') : '<div class="empty">Пока пусто. Создайте первое видео! ✨</div>'}`;
   $view.querySelectorAll('[data-job]').forEach((el) => el.onclick = () => {
@@ -421,7 +424,7 @@ function renderProfile() {
       <div class="avatar">${esc((u.first_name || '?')[0])}</div>
       <div><b>${esc(u.first_name || '')}</b><br><small style="color:var(--muted)">${u.username ? '@' + esc(u.username) + ' · ' : ''}ID ${u.id}</small></div>
     </div>
-    <div class="list-item"><span>Баланс</span><b>${u.balance} 🪙</b></div>
+    <div class="list-item"><span>Баланс</span><b>${u.balance} ₽</b></div>
     <button class="list-item" data-go="topup"><span>Пополнить баланс</span>${icons.chev}</button>
     <button class="list-item" data-go="history"><span>Мои генерации</span>${icons.chev}</button>
     ${state.me.support ? `<button class="list-item" id="support"><span>Поддержка</span>${icons.chev}</button>` : ''}
@@ -441,11 +444,11 @@ function refHtml() {
   return `
     <div class="ref">
       <div class="ref-title">🎁 Приглашай друзей</div>
-      <p class="hint">Получай <b style="color:#fff">${r.percent}%</b> монет с каждого пополнения друга — навсегда.</p>
+      <p class="hint">Получай <b style="color:#fff">${r.percent}%</b> от каждого пополнения друга — навсегда.</p>
       <div class="ref-stats">
         <div><b>${r.invited}</b><small>приглашено</small></div>
         <div><b>${r.paying}</b><small>купили</small></div>
-        <div><b>${r.earned} 🪙</b><small>заработано</small></div>
+        <div><b>${r.earned} ₽</b><small>заработано</small></div>
       </div>
       <div class="ref-link" id="refCopy">${esc(r.link)}</div>
       <button class="cta" id="refShare">Пригласить друга</button>
@@ -458,7 +461,7 @@ function bindRef() {
     try { await navigator.clipboard.writeText(r.link); toast('Ссылка скопирована'); } catch { toast(r.link); }
   });
   $view.querySelector('#refShare')?.addEventListener('click', () => {
-    const text = 'Делаю крутые AI-видео из своих фото 🔥 Попробуй — новым пользователям бонусные монеты!';
+    const text = 'Делаю крутые AI-видео из своих фото 🔥 Попробуй — новым пользователям бонус на баланс!';
     const url = `https://t.me/share/url?url=${encodeURIComponent(r.link)}&text=${encodeURIComponent(text)}`;
     tg?.openTelegramLink ? tg.openTelegramLink(url) : window.open(url, '_blank');
   });
