@@ -211,10 +211,14 @@ async function withTemplateAudio(resultUrl, audioSrc, jobId) {
   const res = await fetch(resultUrl);
   if (!res.ok) throw new Error(`download HTTP ${res.status}`);
   fs.writeFileSync(raw, Buffer.from(await res.arrayBuffer()));
+  const ffmpeg = (video, timeout) => new Promise((resolve, reject) => execFile('ffmpeg', ['-y', '-v', 'error', '-i', raw, '-i', audioSrc,
+    '-map', '0:v:0', '-map', '1:a:0', ...video, '-c:a', 'aac', '-b:a', '192k', '-shortest', '-movflags', '+faststart', out],
+  { timeout }, (e) => (e ? reject(e) : resolve())));
   try {
-    await new Promise((resolve, reject) => execFile('ffmpeg', ['-y', '-v', 'error', '-i', raw, '-i', audioSrc,
-      '-map', '0:v:0', '-map', '1:a:0', '-c:v', 'copy', '-c:a', 'aac', '-b:a', '192k', '-shortest', '-movflags', '+faststart', out],
-    { timeout: 120000 }, (e) => (e ? reject(e) : resolve())));
+    // 720p → 1080p с лёгкой резкостью; если сервер не успел — хотя бы музыка без перекодирования картинки
+    await ffmpeg(['-vf', 'scale=1080:-2:flags=lanczos,unsharp=5:5:0.6:5:5:0.0,format=yuv420p',
+      '-c:v', 'libx264', '-preset', 'medium', '-crf', '19', '-threads', '1'], 600000)
+      .catch((e) => { console.error('upscale', jobId, e.message); return ffmpeg(['-c:v', 'copy'], 120000); });
   } finally {
     fs.rmSync(raw, { force: true });
   }
