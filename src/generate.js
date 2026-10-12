@@ -94,11 +94,11 @@ export function buildPolzaRequest(tool, p, template) {
         },
       };
     case 'tts':
-      return { model: m.tts.model, input: { text: p.prompt, voice: p.voice || 'Rachel' } };
+      return { model: m.tts.model, input: { prompt: String(p.prompt || '').slice(0, 5000), voice: p.voice || 'Rachel' } };
     case 'audio':
       return { model: m.audio.model, input: { prompt: p.prompt } };
     case 'upscale':
-      return { model: m.upscale.model, input: { images: [p.image_url], upscale_factor: '2' } };
+      return { model: m.upscale.model, input: { prompt: '', images: [p.image_url], upscale_factor: '2' } };
     default:
       throw new Error('Неизвестный инструмент');
   }
