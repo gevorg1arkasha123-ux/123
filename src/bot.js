@@ -156,7 +156,7 @@ if (bot) {
     const list = loadTemplates();
     if (!list.length) return ctx.reply('Шаблонов нет. Отправьте видео с подписью, чтобы добавить.');
     for (const t of list.slice(0, 50)) {
-      await ctx.reply(`${t.type === 'motion' ? '🎬' : '📸'} ${t.title} · ${t.category || '—'} · ${t.cost} ₽\nid: ${t.id}`, {
+      await ctx.reply(`${t.type === 'scene' ? '👥' : t.type === 'motion' ? '🎬' : '📸'} ${t.title} · ${t.category || '—'} · ${t.cost} ₽\nid: ${t.id}`, {
         reply_markup: new InlineKeyboard().text('🗑 Удалить', `del:${t.id}`),
       });
     }

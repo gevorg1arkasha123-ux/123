@@ -118,7 +118,7 @@ export const polzaModels = {
     kling: { model: 'kling/v3', rub: 70 }, // 14 ₽/сек со звуком × 5 сек
     seedance: { model: 'bytedance/seedance-2', rub: 140 }, // ~28 ₽/сек 720p × 5 сек
   },
-  template: { model: 'kling/v3-motion-control', i2vModel: 'kling/v3', rub: 140 }, // 14 ₽/сек 720p, до ~10 сек
+  template: { model: 'kling/v3-motion-control', i2vModel: 'kling/v3', sceneModel: 'bytedance/seedance-2', rub: 140 }, // 14 ₽/сек 720p, до ~10 сек; сцена: ~34 ₽/сек
   motion: { model: 'kling/v3-motion-control', rub: 140 },
   image: { model: 'google/gemini-nano-banana-2.1', rub: 3 },
   tryon: { model: 'google/gemini-nano-banana-2.1', rub: 3 },
@@ -163,9 +163,10 @@ function readTemplatesRaw() {
 
 // type "motion" — шаблон с образцовым видео: движения переносятся на фото клиента (как тренды в veo3 bot)
 // type "i2v"    — без видео: фото оживляется по промпту
+// type "scene"  — образцовое видео + faces: ["Танцор", ...]: клиент даёт фото на каждую роль, видео пересобирается целиком
 export function loadTemplates() {
   return readTemplatesRaw().map((t) => {
-    const type = t.video ? 'motion' : 'i2v';
+    const type = t.video ? (t.faces?.length ? 'scene' : 'motion') : 'i2v';
     const falUsd = t.falUsd ?? (type === 'motion' ? tools.template.falUsd : videoModels.kling.falUsd);
     return { ...t, type, falUsd, cost: t.cost ?? priceFor(falUsd) };
   });

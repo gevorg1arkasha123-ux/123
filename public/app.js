@@ -169,6 +169,10 @@ function renderHome() {
 /* ---------- Шаблон ---------- */
 function openTemplate(id) {
   const t = state.templates.find((x) => x.id === id);
+  // шаблон-сцена: отдельное фото на каждую роль
+  const fields = t.faces?.length
+    ? t.faces.map((label, i) => ({ name: `face${i + 1}`, type: 'file', accept: 'image/*', label: `Фото: ${label}` }))
+    : [{ name: 'image', type: 'file', accept: 'image/*', label: 'Ваше фото' }];
   haptic();
   push({
     render() {
@@ -181,11 +185,11 @@ function openTemplate(id) {
         <h2>${esc(t.title)}</h2>
         <p class="hint" style="margin-top:6px">${esc(t.hint || 'Загрузите фото')}</p>
         <form id="f">
-          ${fieldHtml({ name: 'image', type: 'file', accept: 'image/*', label: 'Ваше фото' })}
+          ${fields.map((fl) => fieldHtml(fl)).join('')}
           <button class="cta" type="submit">Создать видео · ${t.cost} ₽</button>
         </form>`;
       bindCommon();
-      bindForm({ tool: 'template', template_id: t.id }, [{ name: 'image', type: 'file' }]);
+      bindForm({ tool: 'template', template_id: t.id }, fields);
     },
   });
 }

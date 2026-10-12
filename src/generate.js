@@ -1,4 +1,7 @@
 import https from 'node:https';
+import fs from 'node:fs';
+import path from 'node:path';
+import { execFile } from 'node:child_process';
 import { config, mockMode, provider, polzaModels, tools, resolveTool } from './config.js';
 import { createJob, updateJob, getJob, pendingJobs, addBalance, chargeBalance } from './db.js';
 
@@ -65,6 +68,17 @@ export function buildPolzaRequest(tool, p, template) {
     : { model: m.video.kling.model, input: { mode: 'std', duration: '5', sound, ...extra } });
   switch (tool) {
     case 'template':
+      if (template.type === 'scene') {
+        const roles = template.faces.map((f, i) => `${f} — the person from image ${i + 1} (@image${i + 1})`).join('; ');
+        return {
+          model: m.template.sceneModel,
+          input: {
+            prompt: template.prompt || `Recreate the reference video (@video1) exactly: the same scenes, cuts, camera moves, poses, dance moves, location, car and timing. Replace the people: ${roles}. Keep every face identical to its photo, keep each person consistent in every shot, do not add text or captions.`,
+            images: p.face_urls, videos: [template.refVideo || template.video],
+            resolution: '720p', duration: String(template.duration || 15), generate_audio: true,
+          },
+        };
+      }
       if (template.type === 'motion') {
         return {
           model: m.template.model,
@@ -188,6 +202,25 @@ function extractUrl(out) {
     || out?.audio?.url || out?.audio_file?.url || out?.audio_url?.url || null;
 }
 
+// Готовый ролик сцены: скачиваем и кладём оригинальную музыку шаблона (Seedance звук генерирует сам и не попадает в бит)
+const audioOverlay = new Map(); // jobId → видео-источник музыки
+
+async function withTemplateAudio(resultUrl, audioSrc, jobId) {
+  const out = path.join(config.uploadsDir, `res-${jobId}-${Date.now()}.mp4`);
+  const raw = `${out}.raw.mp4`;
+  const res = await fetch(resultUrl);
+  if (!res.ok) throw new Error(`download HTTP ${res.status}`);
+  fs.writeFileSync(raw, Buffer.from(await res.arrayBuffer()));
+  try {
+    await new Promise((resolve, reject) => execFile('ffmpeg', ['-y', '-v', 'error', '-i', raw, '-i', audioSrc,
+      '-map', '0:v:0', '-map', '1:a:0', '-c:v', 'copy', '-c:a', 'aac', '-b:a', '192k', '-shortest', '-movflags', '+faststart', out],
+    { timeout: 120000 }, (e) => (e ? reject(e) : resolve())));
+  } finally {
+    fs.rmSync(raw, { force: true });
+  }
+  return `${config.publicUrl}/uploads/${path.basename(out)}`;
+}
+
 let notify = async () => {};
 export function setNotifier(fn) { notify = fn; }
 
@@ -204,6 +237,7 @@ export async function startJob({ userId, tool, params, template }) {
   }
   const falUsd = mockMode ? 0 : estUsd;
   const jobId = createJob({ userId, tool, title, kind, cost, model, falUsd });
+  if (template?.type === 'scene') audioOverlay.set(jobId, template.video);
 
   if (mockMode) {
     // Демо-режим без FAL_KEY: через 4 секунды «готово», в результате — загруженный файл или превью шаблона
@@ -241,7 +275,12 @@ export async function startJob({ userId, tool, params, template }) {
   return jobId;
 }
 
-function finish(jobId, url) {
+async function finish(jobId, url) {
+  const audioSrc = audioOverlay.get(jobId);
+  if (audioSrc) {
+    audioOverlay.delete(jobId);
+    try { url = await withTemplateAudio(url, audioSrc, jobId); } catch (e) { console.error('audio overlay', jobId, e.message); }
+  }
   updateJob(jobId, { status: 'done', result_url: url });
   notify(getJob(jobId)).catch((e) => console.error('notify', e.message));
 }
@@ -249,6 +288,7 @@ function finish(jobId, url) {
 function fail(jobId, error) {
   const job = getJob(jobId);
   if (job.status !== 'queued') return;
+  audioOverlay.delete(jobId);
   updateJob(jobId, { status: 'failed', error: String(error).slice(0, 500) });
   addBalance(job.user_id, job.cost); // возврат монет
   notify(getJob(jobId)).catch((e) => console.error('notify', e.message));

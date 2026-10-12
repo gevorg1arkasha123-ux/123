@@ -81,7 +81,8 @@ app.post('/api/pay/card', async (req, res) => {
   }
 });
 
-const fileFields = upload.fields([{ name: 'image', maxCount: 1 }, { name: 'image2', maxCount: 1 }, { name: 'video', maxCount: 1 }]);
+const fileFields = upload.fields([{ name: 'image', maxCount: 1 }, { name: 'image2', maxCount: 1 }, { name: 'video', maxCount: 1 },
+  { name: 'face1', maxCount: 1 }, { name: 'face2', maxCount: 1 }, { name: 'face3', maxCount: 1 }]);
 
 app.post('/api/generate', fileFields, async (req, res) => {
   const { tool, template_id, prompt, voice, variant, aspect } = req.body;
@@ -103,7 +104,11 @@ app.post('/api/generate', fileFields, async (req, res) => {
     template: ['image_url'], t2v: ['prompt'], i2v: ['image_url'], motion: ['image_url', 'video_url'], image: ['prompt'],
     tryon: ['image_url', 'image2_url'], tts: ['prompt'], audio: ['prompt'], upscale: ['image_url'],
   }[tool];
-  if (need.some((k) => !params[k])) return res.status(400).json({ error: 'Заполните все поля и загрузите файлы' });
+  if (template?.type === 'scene') {
+    // по фото на каждую роль сцены
+    params.face_urls = template.faces.map((_, i) => url(`face${i + 1}`));
+    if (params.face_urls.some((u) => !u)) return res.status(400).json({ error: 'Загрузите фото для каждой роли' });
+  } else if (need.some((k) => !params[k])) return res.status(400).json({ error: 'Заполните все поля и загрузите файлы' });
 
   try {
     const jobId = await startJob({ userId: req.user.id, tool, params, template });
